@@ -31,12 +31,6 @@ Contém o arquivo de definições do Protocol Buffers.
 
 - **`smart_home.proto`**: Define as mensagens utilizadas pelo Gateway e pelos dispositivos. Este arquivo contém as definições das mensagens como `DeviceInfo`, `DeviceCommand`, `DeviceStatus`, etc. O arquivo `.proto` é utilizado para gerar os arquivos Python necessários para a comunicação entre os componentes.
 
-### **README.md**
-Este arquivo de documentação do projeto explica como configurar e executar o sistema distribuído, como usar o sistema e os objetivos do projeto.
-
-### **requirements.txt (principal)**
-Este arquivo lista as dependências globais para o projeto, evitando duplicação das dependências compartilhadas entre o Gateway, dispositivos e Cliente.
-
 ---
 
 ## Passos para Configuração

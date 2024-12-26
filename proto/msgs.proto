@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+message DeviceInfo {
+  string type = 1; // Tipo do dispositivo (ex: Lâmpada, Ar-condicionado, etc.)
+  string ip = 2;
+  int32 port = 3;
+  bool state = 4; // Estado do dispositivo (ligado/desligado)
+}
+
+message DeviceCommand {
+  string device_id = 1; // ID do dispositivo
+  string command = 2; // Comando a ser executado (ex: "LIGAR", "DESLIGAR")
+}
+
+message DeviceStatus {
+  string device_id = 1;
+  bool state = 2;
+}
+
+message SensorData {
+  string device_id = 1;
+  float value = 2; // Valor sensoriado (ex: temperatura, luminosidade)
+}
+
+message DeviceList {
+  repeated DeviceInfo devices = 1;
+}
