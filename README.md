@@ -42,10 +42,16 @@ Após criar o arquivo `smart_home.proto`, você precisa gerar os arquivos Python
 # Gerar os arquivos Python a partir do arquivo .proto
 protoc --python_out=./gateway --python_out=./devices --python_out=./client proto/smart_home.proto
 
+```
+
 ### 2. Instalação das dependências
 
+```bash
 pip install -r requirements.txt
+```
 
 ### 3. Execução do cliente
 
+```bash
 python3 client/client.py
+```
