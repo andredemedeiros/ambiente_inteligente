@@ -31,7 +31,7 @@ def discover_devices():
             data, addr = udp_socket.recvfrom(BUFFER_SIZE)
 
             device_ip = addr[0]  # Extraímos apenas o IP do dispositivo
-            device_port = "40" + data.decode('utf-8')
+            device_port = data.decode('utf-8')
 
             device_tuple = (device_ip, device_port)
             

@@ -77,11 +77,11 @@ def on_message(client, userdata, msg):
                        'Potencia': [0, 0, 0], 
                        'Energia': [0, 0, 0], 
                        'FatorPot': [0, 0, 0],
-                       'Bloco': "706"}
+                       'Bloco': "727"}
 
         if power_on == 1:
             sensor_data = json.loads(str(msg.payload.decode('utf-8')))
-            sensor_data['Bloco'] = "706"  # Garante que o campo 'Bloco' sempre estará presente
+            sensor_data['Bloco'] = "727"  # Garante que o campo 'Bloco' sempre estará presente
 
         send_udp_data(sensor_data)
 
@@ -106,7 +106,7 @@ def send_udp_data(sensor_data):
 
 # Função para configurar o cliente MQTT
 def setup_mqtt_client(bloc: str = "706", env: dict = []) -> paho.Client:
-    
+
     if bloc == "706":
         TOPIC_DEVIC = env.TOPIC_DEVICE_706
     else:
@@ -126,14 +126,14 @@ send_time = 0
 
 def main():
 
-    send_multicast(bloc="706", env=env)
+    send_multicast(bloc="727", env=env)
 
-    server_thread = threading.Thread(target=tcp_server, args=("706", env))
+    server_thread = threading.Thread(target=tcp_server, args=("727", env))
     server_thread.daemon = True  # Faz com que a thread seja encerrada quando o programa principal for encerrado
     server_thread.start()
 
     # Configura e começa a rodar o cliente MQTT
-    client = setup_mqtt_client(bloc="706", env=env)
+    client = setup_mqtt_client(bloc="727", env=env)
     client.loop_forever()
 
 # Chama a função principal
