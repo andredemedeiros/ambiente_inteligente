@@ -77,11 +77,13 @@ def on_message(client, userdata, msg):
                        'Potencia': [0, 0, 0], 
                        'Energia': [0, 0, 0], 
                        'FatorPot': [0, 0, 0],
-                       'Bloco': "706"}
+                       'Bloco': "706",
+                       'Estado': power_on}
 
         if power_on == 1:
             sensor_data = json.loads(str(msg.payload.decode('utf-8')))
             sensor_data['Bloco'] = "706"  # Garante que o campo 'Bloco' sempre estará presente
+            sensor_data['Estado'] = power_on
 
         send_udp_data(sensor_data)
 

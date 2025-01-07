@@ -55,3 +55,14 @@ pip install -r requirements.txt
 ```bash
 python3 client/client.py
 ```
+
+Execução:
+
+1: executar o gateway:
+gateway/gtw.py
+
+2: executar os dispositivos:
+devices/bloco706.py
+devices/bloco727.py
+
+3: executar o cliente:
