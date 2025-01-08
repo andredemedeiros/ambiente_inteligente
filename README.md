@@ -7,62 +7,50 @@ Este é um sistema distribuído que simula um ambiente inteligente, com um Gatew
 ### **gateway/**
 O diretório do Gateway contém o código central de controle e monitoramento dos dispositivos.
 
-- **`gateway.py`**: Contém o código principal do Gateway, responsável por gerenciar a comunicação com os dispositivos e o Cliente. Ele se comunica com os dispositivos utilizando TCP e realiza a descoberta via UDP multicast.
-- **`proto_pb2.py`**: Arquivo gerado automaticamente pelo `protoc` a partir do arquivo `.proto`, contendo as definições das mensagens Protocol Buffers utilizadas no Gateway.
-- **`requirements.txt`**: Lista as dependências necessárias para o Gateway (como `protobuf`, `socket`).
-
 ### **devices/**
 O diretório dos dispositivos contém o código de simulação de dispositivos inteligentes no ambiente.
 
-- **`lamp_device.py`**: Simula um dispositivo de tipo "Lâmpada". Este é um exemplo de atuador, que pode ser ligado ou desligado e tem controle de intensidade de luz.
-- **`ac_device.py`**: Simula um dispositivo do tipo "Ar-Condicionado". Este dispositivo pode ser controlado pelo Gateway.
-- **`sensor_device.py`**: Simula um dispositivo sensor (ex: Sensor de temperatura), que envia dados periodicamente (por exemplo, a cada 15 segundos) ao Gateway.
-- **`proto_pb2.py`**: Arquivo gerado automaticamente pelo `protoc` para definir as mensagens Protocol Buffers específicas dos dispositivos.
-- **`requirements.txt`**: Lista as dependências necessárias para os dispositivos (como `protobuf`, `socket`).
+- **`bloco706.py`**: Possui um sensor de energia e um simulador de atuador de energia no bloco 706.
+- **`bloco727.py`**: Possui um sensor de energia e um simulador de atuador de energia no bloco 727.
 
 ### **client/**
-O diretório do Cliente contém o código principal para interação com o Gateway.
+O diretório do Cliente contém o código principal para interação do cliente com o Gateway.
 
-- **`client.py`**: Contém o código do Cliente, que se conecta ao Gateway via TCP para consultar os estados dos dispositivos e enviar comandos para controlá-los.
-- **`requirements.txt`**: Lista as dependências necessárias para o Cliente (como `protobuf`).
+- **`client.py`**: Contém o código do Cliente, que se conecta diretamente ao Gateway via TCP e UDP. O cliente recebe os dados dos sensores via UDP e altera o estados dos dispositivos via TCP.
+- **`site.py`**: Código para gerar uma interface de visualização de dados com a biblioteca streamilit.
+
+- **`data/`**: Diretório para armazenas os dados recebidos pelo cliente no fomarto de arquivos csv.
 
 ### **proto/**
 Contém o arquivo de definições do Protocol Buffers.
 
-- **`smart_home.proto`**: Define as mensagens utilizadas pelo Gateway e pelos dispositivos. Este arquivo contém as definições das mensagens como `DeviceInfo`, `DeviceCommand`, `DeviceStatus`, etc. O arquivo `.proto` é utilizado para gerar os arquivos Python necessários para a comunicação entre os componentes.
+- **`msgs.proto`**: Define as mensagens utilizadas pelo Gateway e pelos dispositivos. Este arquivo contém as definições das mensagens. O arquivo `.proto` é utilizado para gerar os arquivos Python necessários para a comunicação entre os componentes.
 
 ---
 
-## Passos para Configuração
+## Execução
 
-### 1. Gerar os Arquivos Python a partir do Arquivo `.proto`
-Após criar o arquivo `smart_home.proto`, você precisa gerar os arquivos Python de Protocol Buffers. Use o comando `protoc` para isso. Suponha que o arquivo `smart_home.proto` esteja localizado no diretório `proto/`:
-
-```bash
-# Gerar os arquivos Python a partir do arquivo .proto
-protoc --python_out=./gateway --python_out=./devices --python_out=./client proto/smart_home.proto
-
-```
-
-### 2. Instalação das dependências
+### 1. Executar processos devices
 
 ```bash
-pip install -r requirements.txt
-```
-
-### 3. Execução do cliente
-
-```bash
-python3 client/client.py
-```
-
-Execução:
-
-1: executar o gateway:
-gateway/gtw.py
-
-2: executar os dispositivos:
 devices/bloco706.py
 devices/bloco727.py
+```
 
-3: executar o cliente:
+### 2. Executar processo gateway
+
+```bash
+gateway/gtw.py
+```
+
+### 3. Executar processo do cliente
+
+```bash
+client/client.py
+```
+
+### 4. Executar processo da interface
+
+```bash
+client/site.py
+```
