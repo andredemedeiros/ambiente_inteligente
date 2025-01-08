@@ -82,18 +82,17 @@ def discover_devices():
                 device_port = data_json.get("PORTA ENVIO TCP")
 
                 achou = 0
-                # Atualizar o dispositivo existente com o novo IP e porta
+                # Atualizar o dispositivo existente com o novo IP e porta informados
                 for dev in devices:
                     if dev['BLOCO'] == device_bloc:
                         dev['IP'] = device_ip
                         dev['PORTA ENVIO TCP'] = device_port
-                        print(f"Dispositivo {device_bloc} atualizado com o novo IP: {device_ip} e porta: {device_port}")
                         achou = 1
                         break
 
                 if achou == 0:
                     devices.append(data_json)
-                    print(f"Novo dispositivo encontrado: {data_json}")
+                    print(f"Novo dispositivo encontrado via multicast: {data_json}")
 
         except socket.timeout:
             continue
@@ -110,35 +109,33 @@ def listen_for_sensor_data():
 
             # Decodifica os dados recebidos, espera um JSON com dados do sensor
             sensor_data = json.loads(data.decode('utf-8'))
-            print(f"Dados de sensor recebidos de {addr}: {sensor_data}")
+            print(f"Dado recebido: {sensor_data}")
 
         except Exception as e:
             print(f"Erro ao receber dados UDP: {e}")
 
-def change_device_state(device_ip, device_port, state):
+def change_device_state(device_bloc,device_ip, device_port, state):
     try:
         # Cria o socket TCP
         tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         tcp_socket.settimeout(10)  # Timeout para evitar bloqueios infinitos
         tcp_socket.connect((device_ip, int(device_port)))
-        print(f"Conectado ao dispositivo {device_ip} na porta {device_port}")
 
         message = state
         tcp_socket.send(message.encode())
-        print(f"Mensagem enviada para {device_ip}: {message}")
+        print(f"Mensagem: {message} enviada para dispositivo do bloco {device_bloc}")
         time.sleep(5)
 
     except (socket.timeout, socket.error) as e:
         print(f"Falha na conexão TCP com {device_ip}:{device_port} - Erro: {e}")
         # Remove o dispositivo da lista de dispositivos caso haja erro de conexão
         devices[:] = [dev for dev in devices if not (dev['IP'] == device_ip and dev['PORTA ENVIO TCP'] == device_port)]
-        print(f"Dispositivo {device_ip}:{device_port} removido da lista de dispositivos.")
+        print(f"Dispositivo do bloco {device_bloc} removido.")
         tcp_socket.close()
 
     finally:
         tcp_socket.close()
-        print(f"Conexão com {device_ip}:{device_port} fechada.")
-
+        
 # Função principal que gerencia as threads
 def main():
 
@@ -161,18 +158,20 @@ def main():
     while True:
 
         for dev in devices:
+           device_bloc = dev.get("BLOCO")
            device_ip = dev.get("IP")
            device_port = dev.get("PORTA ENVIO TCP")
 
-           change_device_state(device_ip, device_port, "0")
+           change_device_state(device_bloc,device_ip, device_port, "0")
 
         time.sleep(5)
 
         for dev in devices:
+           device_bloc = dev.get("BLOCO")
            device_ip = dev.get("IP")
            device_port = dev.get("PORTA ENVIO TCP")
         
-           change_device_state(device_ip, device_port, "1")
+           change_device_state(device_bloc,device_ip, device_port, "1")
 
         time.sleep(5)
 
