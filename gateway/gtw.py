@@ -23,8 +23,9 @@ def send_multicast_gtw():
 
     MCAST_MSG = {
         'TIPO': "GTW",
+        'GTW ID': 1,
         'IP': GTW_IP, 
-        'PORTA ENVIO UDP': MCAST_PORT
+        'PORTA ENVIO UDP': GTW_UDP_PORT
     }
 
     # Criação do socket
@@ -54,7 +55,7 @@ def send_multicast_gtw():
     sock.close() 
 
 # Função para descobrir dispositivos via multicast UDP
-def discover_devices_gtw():
+def discover_devices():
     # Cria o socket UDP
     udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -70,9 +71,10 @@ def discover_devices_gtw():
             data, addr = udp_socket.recvfrom(BUFFER_SIZE)
 
             data_json = json.loads(data.decode('utf-8'))
-
+            
             # Verifica se é do tipo "Device"
             if data_json["TIPO"] == "DEVICE":
+                
                 
                 # Verificar se o dispositivo referente ao bloco já foi adicionado à lista de dispositivos
                 device_bloc = data_json.get("BLOCO")
@@ -84,7 +86,7 @@ def discover_devices_gtw():
                 for dev in devices:
                     if dev['BLOCO'] == device_bloc:
                         dev['IP'] = device_ip
-                        dev['PORTA'] = device_port
+                        dev['PORTA ENVIO TCP'] = device_port
                         print(f"Dispositivo {device_bloc} atualizado com o novo IP: {device_ip} e porta: {device_port}")
                         achou = 1
                         break
@@ -113,7 +115,6 @@ def listen_for_sensor_data():
         except Exception as e:
             print(f"Erro ao receber dados UDP: {e}")
 
-# Função para gerenciar a conexão TCP persistente
 def change_device_state(device_ip, device_port, state):
     try:
         # Cria o socket TCP
@@ -129,6 +130,11 @@ def change_device_state(device_ip, device_port, state):
 
     except (socket.timeout, socket.error) as e:
         print(f"Falha na conexão TCP com {device_ip}:{device_port} - Erro: {e}")
+        # Remove o dispositivo da lista de dispositivos caso haja erro de conexão
+        devices[:] = [dev for dev in devices if not (dev['IP'] == device_ip and dev['PORTA ENVIO TCP'] == device_port)]
+        print(f"Dispositivo {device_ip}:{device_port} removido da lista de dispositivos.")
+        tcp_socket.close()
+        
     finally:
         tcp_socket.close()
         print(f"Conexão com {device_ip}:{device_port} fechada.")
@@ -142,7 +148,7 @@ def main():
     send_multicast_gtw_thread.start()
 
     # Thread que armazena os dispositivos via multicast UDP
-    recv_multicast_gtw_thread = threading.Thread(target=discover_devices_gtw)
+    recv_multicast_gtw_thread = threading.Thread(target=discover_devices)
     recv_multicast_gtw_thread.daemon = True
     recv_multicast_gtw_thread.start()
 

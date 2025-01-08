@@ -1,0 +1,1 @@
+2 sensors 1 atuador
