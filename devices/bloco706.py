@@ -4,22 +4,32 @@ import json
 import time
 import threading
 import box
+
 from dotenv import dotenv_values
 
 import paho.mqtt.client as paho
 from paho import mqtt
 
-def load_env(env_path: str = ".env") -> dict:
-    return box.Box(dotenv_values(env_path))
+# Configurações
+env = box.Box(dotenv_values(".env"))
+
+MCAST_GRP = env.MCAST_GRP
+MCAST_PORT = int(env.MCAST_PORT)
+
+power_on = 1
+send_time = 0
+
 
 def send_multicast(bloc: str = "706", env: dict = []) -> None:
-    MCAST_GRP = env.MCAST_GRP
-    MCAST_PORT = env.MCAST_PORT
+    
 
-    if bloc == "706":
-        MCAST_MSG = env.TCP_PORT_706
-    else:
-        MCAST_MSG = env.TCP_PORT_727
+    MCAST_MSG = {
+        'TIPO': "DEVICE",
+        'BLOCO': 706,
+        'IP': "127.0.0.1", 
+        'PORTA ENVIO TCP': 40706
+    }
+
 
     # Criação do socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -29,7 +39,7 @@ def send_multicast(bloc: str = "706", env: dict = []) -> None:
     sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
 
     # Enviar a mensagem multicast
-    sock.sendto(MCAST_MSG.encode('utf-8'), (MCAST_GRP, int(MCAST_PORT)))
+    sock.sendto(json.dumps(MCAST_MSG).encode('utf-8'), (MCAST_GRP, int(MCAST_PORT)))
     print(f'Mensagem enviada para {MCAST_GRP}:{MCAST_PORT}.')
 
     sock.close()
@@ -122,9 +132,6 @@ def setup_mqtt_client(bloc: str = "706", env: dict = []) -> paho.Client:
     client.subscribe(TOPIC_DEVIC)
     return client
 
-env = load_env()
-power_on = 1
-send_time = 0
 
 def main():
 

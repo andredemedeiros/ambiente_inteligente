@@ -3,19 +3,58 @@ import struct
 import threading
 import time
 import json
+import box
+from dotenv import dotenv_values
 
 # Configurações
-MCAST_GRP = '228.0.0.8'
-MCAST_PORT = 6789
+env = box.Box(dotenv_values(".env"))
 
-UDP_PORT = 12345  # Porta para receber dados UDP de sensores
+MCAST_GRP = env.MCAST_GRP
+MCAST_PORT = int(env.MCAST_PORT)
+GTW_IP = env.GTW_IP
+GTW_UDP_PORT = int(env.GTW_UDP_PORT)  # Porta para receber dados UDP de sensores
+BUFFER_SIZE = int(env.BUFFER_SIZE)
 
-BUFFER_SIZE = 1024
+devices = []  # Lista de dispositivos disponíveis via multicast UDP
 
-devices = []  # Lista de dispositivos conectados
+def send_multicast_gtw():
+    MCAST_GRP = env.MCAST_GRP
+    MCAST_PORT = env.MCAST_PORT
+
+    MCAST_MSG = {
+        'TIPO': "GTW",
+        'IP': GTW_IP, 
+        'PORTA ENVIO UDP': MCAST_PORT
+    }
+
+    # Criação do socket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+    # Definindo o TTL para o pacote multicast (valor padrão 1 significa "só na rede local")
+    ttl = struct.pack('b', 1)
+    sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
+
+    # Loop para enviar a mensagem periodicamente
+    while True:
+        try:
+            # Serializando a mensagem para JSON antes de enviar
+            message = json.dumps(MCAST_MSG)
+
+            # Enviar a mensagem multicast
+            sock.sendto(message.encode('utf-8'), (MCAST_GRP, int(MCAST_PORT)))
+            print(f'Mensagem enviada para {MCAST_GRP}:{MCAST_PORT}.')
+
+            # Aguardar o próximo envio (intervalo de 5 segundos, por exemplo)
+            time.sleep(5)
+
+        except Exception as e:
+            print(f"Erro ao enviar a mensagem: {e}")
+            break
+
+    sock.close() 
 
 # Função para descobrir dispositivos via multicast UDP
-def discover_devices():
+def discover_devices_gtw():
     # Cria o socket UDP
     udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -30,19 +69,49 @@ def discover_devices():
             # Aguarda a resposta de um dispositivo
             data, addr = udp_socket.recvfrom(BUFFER_SIZE)
 
-            device_ip = addr[0]  # Extraímos apenas o IP do dispositivo
-            device_port = data.decode('utf-8')
+            data_json = json.loads(data.decode('utf-8'))
 
-            device_tuple = (device_ip, device_port)
-            
-            if device_tuple not in devices:
-                print(f"Dispositivo encontrado: {device_ip} na porta {device_port}")
-                devices.append(device_tuple)
-            else:
-                print(f"Dispositivo {device_ip} já foi registrado (porta {device_port}).")
-            
+            # Verifica se é do tipo "Device"
+            if data_json["TIPO"] == "DEVICE":
+                
+                # Verificar se o dispositivo referente ao bloco já foi adicionado à lista de dispositivos
+                device_bloc = data_json.get("BLOCO")
+                device_ip = data_json.get("IP")  # Extraímos o IP do dispositivo
+                device_port = data_json.get("PORTA ENVIO TCP")
+
+                achou = 0
+                # Atualizar o dispositivo existente com o novo IP e porta
+                for dev in devices:
+                    if dev['BLOCO'] == device_bloc:
+                        dev['IP'] = device_ip
+                        dev['PORTA'] = device_port
+                        print(f"Dispositivo {device_bloc} atualizado com o novo IP: {device_ip} e porta: {device_port}")
+                        achou = 1
+                        break
+
+                if achou == 0:
+                    devices.append(data_json)
+                    print(f"Novo dispositivo encontrado: {data_json}")
+
         except socket.timeout:
             continue
+
+# Função para escutar dados UDP's de sensores
+def listen_for_sensor_data():
+    udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    udp_socket.bind(('', GTW_UDP_PORT))  # Bind para escutar a porta UDP do sensor
+
+    while True:
+        try:
+            # Recebe os dados do sensor
+            data, addr = udp_socket.recvfrom(BUFFER_SIZE)
+
+            # Decodifica os dados recebidos, espera um JSON com dados do sensor
+            sensor_data = json.loads(data.decode('utf-8'))
+            print(f"Dados de sensor recebidos de {addr}: {sensor_data}")
+
+        except Exception as e:
+            print(f"Erro ao receber dados UDP: {e}")
 
 # Função para gerenciar a conexão TCP persistente
 def change_device_state(device_ip, device_port, state):
@@ -64,43 +133,42 @@ def change_device_state(device_ip, device_port, state):
         tcp_socket.close()
         print(f"Conexão com {device_ip}:{device_port} fechada.")
 
-# Função para escutar os dados UDP de sensor
-def listen_for_sensor_data():
-    udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    udp_socket.bind(('', UDP_PORT))  # Bind para escutar a porta UDP de sensor
-
-    while True:
-        try:
-            # Recebe os dados do sensor
-            data, addr = udp_socket.recvfrom(BUFFER_SIZE)
-
-            # Decodifica os dados recebidos, espera um JSON com dados do sensor
-            sensor_data = json.loads(data.decode('utf-8'))
-            print(f"Dados de sensor recebidos de {addr}: {sensor_data}")
-
-        except Exception as e:
-            print(f"Erro ao receber dados UDP: {e}")
-
 # Função principal que gerencia as threads
 def main():
 
-    # Descobrir dispositivos via multicast UDP
-    udp_thread = threading.Thread(target=discover_devices)
-    udp_thread.daemon = True
-    udp_thread.start()
+    # Thread de apresentação como gtw ao grupo multicast 
+    send_multicast_gtw_thread = threading.Thread(target=send_multicast_gtw)
+    send_multicast_gtw_thread.daemon = True
+    send_multicast_gtw_thread.start()
+
+    # Thread que armazena os dispositivos via multicast UDP
+    recv_multicast_gtw_thread = threading.Thread(target=discover_devices_gtw)
+    recv_multicast_gtw_thread.daemon = True
+    recv_multicast_gtw_thread.start()
 
     # Escutar dados de sensores via UDP
-    sensor_thread = threading.Thread(target=listen_for_sensor_data)
-    sensor_thread.daemon = True
-    sensor_thread.start()
+    recv_sensor_data_thread = threading.Thread(target=listen_for_sensor_data)
+    recv_sensor_data_thread.daemon = True
+    recv_sensor_data_thread.start()
 
-    # Altera estados dos dispositivos através de conexão TCP
+    # Muda estado de dispositivos através de conexão TCP
     while True:
 
-        for device_ip, device_port in devices:
-            change_device_state(device_ip, device_port, "0")
+        for dev in devices:
+           device_ip = dev.get("IP")
+           device_port = dev.get("PORTA ENVIO TCP")
 
-        time.sleep(15)
+           change_device_state(device_ip, device_port, "0")
+
+        time.sleep(5)
+
+        for dev in devices:
+           device_ip = dev.get("IP")
+           device_port = dev.get("PORTA ENVIO TCP")
+        
+           change_device_state(device_ip, device_port, "1")
+
+        time.sleep(5)
 
 if __name__ == "__main__":
     main()
