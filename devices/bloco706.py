@@ -29,7 +29,6 @@ DEVC_IP = env.DEVC_706_IP
 DEVC_TCP_PORT = int(env.DEVC_706_TCP_PORT)  # Porta para receber dados UDP de sensores
 BUFFER_SIZE = int(env.BUFFER_SIZE)
 
-
 power_on = 1
 send_time = 0
 
@@ -52,6 +51,7 @@ def send_multicast_device():
     sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
 
     # Loop para enviar a mensagem periodicamente
+    print(f'Enviando mensagens enviada para multicast ({MCAST_GRP}:{MCAST_PORT}).')
     while True:
         try:
             # Serializando a mensagem para JSON antes de enviar
@@ -59,8 +59,7 @@ def send_multicast_device():
 
             # Enviar a mensagem multicast
             sock.sendto(message_mcast.encode('utf-8'), (MCAST_GRP, MCAST_PORT))
-            print(f'Mensagem enviada para {MCAST_GRP}:{MCAST_PORT}.')
-
+          
             # Aguardar o próximo envio (intervalo de 5 segundos, por exemplo)
             time.sleep(5)
 
@@ -100,9 +99,6 @@ def discover_gtws():
                 # Atualizar o gtw existente com o novo IP e porta
                 for gtw in gateways:
                     if gtw['GTW ID'] == gtw_id:
-                        gtw['IP'] = gtw_ip
-                        gtw['PORTA ENVIO UDP'] = gtw_port
-                        print(f"GTW {gtw_id} atualizado: {gtw}")
                         achou = 1
                         break
 
@@ -198,7 +194,7 @@ def clear_gateways_list():
         global gateways
         gateways.clear()  # Esvazia a lista de gateways
         print("Lista de gateways esvaziada.")
-        
+
 def main():
 
     # Thread de apresentação como dispositivo ao grupo multicast 

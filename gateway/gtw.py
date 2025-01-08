@@ -36,6 +36,7 @@ def send_multicast_gtw():
     sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
 
     # Loop para enviar a mensagem periodicamente
+    print(f'Enviando mensagens enviada para multicast ({MCAST_GRP}:{MCAST_PORT}).')
     while True:
         try:
             # Serializando a mensagem para JSON antes de enviar
@@ -43,7 +44,6 @@ def send_multicast_gtw():
 
             # Enviar a mensagem multicast
             sock.sendto(message.encode('utf-8'), (MCAST_GRP, int(MCAST_PORT)))
-            print(f'Mensagem enviada para {MCAST_GRP}:{MCAST_PORT}.')
 
             # Aguardar o próximo envio (intervalo de 5 segundos, por exemplo)
             time.sleep(5)
@@ -134,7 +134,7 @@ def change_device_state(device_ip, device_port, state):
         devices[:] = [dev for dev in devices if not (dev['IP'] == device_ip and dev['PORTA ENVIO TCP'] == device_port)]
         print(f"Dispositivo {device_ip}:{device_port} removido da lista de dispositivos.")
         tcp_socket.close()
-        
+
     finally:
         tcp_socket.close()
         print(f"Conexão com {device_ip}:{device_port} fechada.")
