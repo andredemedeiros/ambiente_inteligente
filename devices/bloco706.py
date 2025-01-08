@@ -29,6 +29,8 @@ DEVC_IP = env.DEVC_706_IP
 DEVC_TCP_PORT = int(env.DEVC_706_TCP_PORT)  # Porta para receber dados UDP de sensores
 BUFFER_SIZE = int(env.BUFFER_SIZE)
 
+TIME_RESET_GTW = int(env.TIME_RESET_GTW)
+
 power_on = 1
 send_time = 0
 
@@ -51,7 +53,7 @@ def send_multicast_device():
     sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
 
     # Loop para enviar a mensagem periodicamente
-    print(f'Enviando mensagens enviada para multicast ({MCAST_GRP}:{MCAST_PORT}).')
+    print(f'Enviando mensagens via multicast ({MCAST_GRP}:{MCAST_PORT}).')
     while True:
         try:
             # Serializando a mensagem para JSON antes de enviar
@@ -113,21 +115,20 @@ def tcp_server():
     global power_on
     
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.bind(('', DEVC_TCP_PORT))  # Escuta na porta 40706 ou 40727
+    server_socket.bind(('', DEVC_TCP_PORT))  # Escuta na porta 50706 ou 50727
     server_socket.listen(1)
     
-    print("Servidor TCP aguardando conexão...")
+    print("Socket TCP disponível...")
     
     while True:
         client_socket, addr = server_socket.accept()
-        print(f"Conexão de {addr}")
         
         try:
             data = client_socket.recv(1024)  # Recebe dados do cliente
             if data:
                 try:
                     power_on = int(data.decode('utf-8'))
-                    print(f"Valor de power_on atualizado para: {power_on}")
+                    print(f"Valor de power_on definido em: {power_on}")
                 except ValueError:
                     print(f"Dados recebidos inválidos: {data.decode('utf-8')}")
         except Exception as e:
@@ -172,7 +173,7 @@ def send_udp_data(sensor_data):
         
         # Enviar os dados para o cliente UDP
         sock.sendto(message_sensor, (gtw_ip, gte_send_udp_port))
-        print(f"Dados do sensor 706 enviados para {gtw}.")
+        print(f"Dados do sensor do bloco 706 enviados para {gtw}.")
         
         sock.close()
 
@@ -190,7 +191,7 @@ def setup_mqtt_client():
 # Função para esvaziar a lista de gateways a cada 30 segundos
 def clear_gateways_list():
     while True:
-        time.sleep(30)  # Espera 30 segundos
+        time.sleep(TIME_RESET_GTW)  # Espera 30 segundos
         global gateways
         gateways.clear()  # Esvazia a lista de gateways
         print("Lista de gateways esvaziada.")

@@ -36,7 +36,7 @@ def send_multicast_gtw():
     sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
 
     # Loop para enviar a mensagem periodicamente
-    print(f'Enviando mensagens enviada para multicast ({MCAST_GRP}:{MCAST_PORT}).')
+    print(f'Enviando mensagens via multicast ({MCAST_GRP}:{MCAST_PORT}).')
     while True:
         try:
             # Serializando a mensagem para JSON antes de enviar
