@@ -12,6 +12,9 @@ O diretório dos dispositivos contém o código de simulação de dispositivos i
 
 - **`bloco706.py`**: Possui um sensor de energia e um simulador de atuador de energia no bloco 706.
 - **`bloco727.py`**: Possui um sensor de energia e um simulador de atuador de energia no bloco 727.
+- **`blocoA.py`**: Possui um simuldaor de sensor de energia e de atuador de energia em um bloco A.
+- **`blocob.py`**: Possui um simuldaor de sensor de energia e de atuador de energia em um bloco B.
+- **`blocoC.py`**: Possui um simuldaor de sensor de energia e de atuador de energia em um bloco C.
 
 ### **client/**
 O diretório do Cliente contém o código principal para interação do cliente com o Gateway.
