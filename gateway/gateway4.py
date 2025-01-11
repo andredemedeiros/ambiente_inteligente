@@ -87,7 +87,7 @@ def listen_for_sensor_data():
                 print(f"[ERRO] Dados inválidos recebidos: {data}. Erro: {e}")
                 continue
 
-            print(f"[DEBUG] Dados decodificados: {sensor_data}")
+            #print(f"[DEBUG] Dados decodificados: {sensor_data}")
 
             # Identifica o bloco pelo campo "Bloco"
             block_id = sensor_data.get('Bloco')  # Usa 'Bloco' como identificador
