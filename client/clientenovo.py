@@ -18,11 +18,10 @@ def receive_data(sock):
         print(f"Erro ao receber dados do gateway: {e}")
 
 # Função para enviar comandos para o gateway
-def send_command(sock, sensor_id, command):
+def send_command(sock, command):
     try:
-        message = {"type": "COMMAND", "id": sensor_id, "command": command}
-        sock.sendall(json.dumps(message).encode())
-        print(f"Comando enviado: {message}")
+        sock.sendall(json.dumps(command).encode())
+        print(f"Comando enviado: {command}")
     except Exception as e:
         print(f"Erro ao enviar comando: {e}")
 
@@ -30,15 +29,24 @@ def send_command(sock, sensor_id, command):
 def interact_with_gateway(sock):
     try:
         while True:
-            print("\n1. Enviar comando ao sensor\n2. Sair")
+            print("\n1. Mostrar atuadores conectados")
+            print("2. Enviar comando para atuador")
+            print("3. Sair")
             option = input("Escolha uma opção: ")
 
             if option == "1":
-                sensor_id = input("ID do sensor: ")
-                command = input("Comando (on/off): ")
-                send_command(sock, sensor_id, command)
+                print("Solicitando lista de atuadores conectados...")
+                send_command(sock, {"ACTION": "LIST_DEVICES"})
 
             elif option == "2":
+                bloc_id = input("ID do atuador: ")
+                state = input("Comando (on/off): ")
+                if state.lower() not in ["on", "off"]:
+                    print("Comando inválido. Use 'on' ou 'off'.")
+                    continue
+                send_command(sock, {"ACTION": "CHANGE_STATE", "BLOCO": bloc_id, "STATE": "1" if state.lower() == "on" else "0"})
+
+            elif option == "3":
                 print("Encerrando cliente...")
                 break
 
