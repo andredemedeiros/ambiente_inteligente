@@ -126,7 +126,7 @@ def handle_client(client_socket):
             if command.startswith("SET_STATE"):
                 _, bloc, state = command.split()
                 for dev in devices:
-                    if str(dev["BLOCO"]) == bloc:
+                    if dev["BLOCO"] == bloc:
                         change_device_state(bloc, dev["IP"], dev["PORTA ENVIO TCP"], state)
  
 
