@@ -18,6 +18,8 @@ TCP_PORT = 6000  # Porta TCP para comunicação com o cliente
 
 devices = []  # Lista de dispositivos disponíveis via multicast UDP
 sensor_data_queue = []  # Fila para armazenar dados de sensores
+recent_sensor_data = {}
+recent_sensor_data_lock = threading.Lock()
 
 def send_multicast_gtw():
     MCAST_MSG = {
@@ -69,17 +71,39 @@ def discover_devices():
             continue
 
 def listen_for_sensor_data():
+    global recent_sensor_data  # Declara que está usando a variável global
     udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     udp_socket.bind(('', GTW_UDP_PORT))
 
     while True:
         try:
+            # Recebe dados do socket
             data, addr = udp_socket.recvfrom(BUFFER_SIZE)
-            sensor_data = json.loads(data.decode('utf-8'))
-            print(f"Dado recebido: {sensor_data}")
+            print(f"[DEBUG] Dados brutos recebidos: {data}")
+
+            try:
+                sensor_data = json.loads(data.decode('utf-8'))
+            except json.JSONDecodeError as e:
+                print(f"[ERRO] Dados inválidos recebidos: {data}. Erro: {e}")
+                continue
+
+            print(f"[DEBUG] Dados decodificados: {sensor_data}")
+
+            # Identifica o bloco pelo campo "Bloco"
+            block_id = sensor_data.get('Bloco')  # Usa 'Bloco' como identificador
+            if block_id is None:
+                print(f"[DEBUG] Dados recebidos sem 'Bloco': {sensor_data}")
+                continue
+
+            # Atualiza o dado mais recente no vetor global protegido por Lock
+            with recent_sensor_data_lock:
+                recent_sensor_data[block_id] = sensor_data
+
+            # Adiciona à fila de dados recebidos
             sensor_data_queue.append(sensor_data)
         except Exception as e:
-            print(f"Erro ao receber dados UDP: {e}")
+            print(f"[ERRO] Erro ao receber dados UDP: {e}")
+
 
 def tcp_server():
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -96,26 +120,27 @@ def tcp_server():
 def handle_client(client_socket):
     try:
         while True:
-            # Envia dados do sensor para o cliente
-            if sensor_data_queue:
-                sensor_data = sensor_data_queue.pop(0)
-                client_socket.sendall(json.dumps(sensor_data).encode('utf-8'))
-
             # Recebe comandos do cliente
-            command = client_socket.recv(1024).decode('utf-8')
+            command = client_socket.recv(1024).decode('utf-8').strip()
+            print(f"[DEBUG] Comando recebido: {command}")
             if command.startswith("SET_STATE"):
                 _, bloc, state = command.split()
                 for dev in devices:
                     if dev["BLOCO"] == bloc:
                         change_device_state(bloc, dev["IP"], dev["PORTA ENVIO TCP"], state)
  
-            elif command.startswith("RECIEVE_DATA"):
-                _, bloc, state = command.split()
-                for dev in devices:
-                    if dev["BLOCO"] == bloc:
-                        change_device_state(bloc, dev["IP"], dev["PORTA ENVIO TCP"], state)
+
+            if command == "RECIEVE_DATA":
+                # Formata os dados para exibição legível
+                with recent_sensor_data_lock:
+                    formatted_data = "Dados recentes:\n"
+                    for block_id, data in recent_sensor_data.items():
+                        formatted_data += f"- Bloco {block_id}: {data}\n"
+                
+                print(f"[DEBUG] Dados enviados ao cliente:\n{formatted_data}")
+                client_socket.sendall(formatted_data.encode('utf-8'))
     except Exception as e:
-        print(f"Erro no cliente: {e}")
+        print(f"[ERRO] Erro no cliente: {e}")
     finally:
         client_socket.close()
 

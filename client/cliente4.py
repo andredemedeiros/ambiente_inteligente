@@ -9,7 +9,7 @@ def receive_data(client_socket):
         try:
             data = client_socket.recv(1024).decode('utf-8')
             if data:
-                print(f"\n[DADOS DO SENSOR]: {data}")
+                print(f"\n================= [DADOS DOS SENSORES] ================== \n {data}")
         except Exception as e:
             print(f"[ERRO] Erro ao receber dados: {e}")
             break
@@ -21,10 +21,9 @@ def send_commands(client_socket):
     while True:
         try:
             command = input(
-                "Opções de comando:\n"
+                "\n\nOpções de comando:\n"
                 "- SET_STATE BLOCO (1-ON/0-OFF)\n"
                 "- RECIEVE_DATA\n"
-                "- LIST\n"
                 )
             if command:
                 client_socket.sendall(command.encode('utf-8'))
