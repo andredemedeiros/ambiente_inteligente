@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+message SensorData {
+    repeated float Tensao = 1;
+    repeated float Corrente = 2;
+    repeated float Potencia = 3;
+    repeated float Energia = 4;
+    repeated float FatorPot = 5;
+    string Bloco = 6;
+    int32 Estado = 7;
+}
+
+message DeviceInfo {
+    string TIPO = 1;
+    string BLOCO = 2;
+    string IP = 3;
+    int32 PORTA_ENVIO_TCP = 4;
+}
+
+message GatewayInfo {
+    string TIPO = 1;
+    int32 GTW_ID = 2;
+    string IP = 3;
+    int32 PORTA_ENVIO_UDP = 4;
+}

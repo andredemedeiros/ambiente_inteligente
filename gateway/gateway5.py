@@ -4,6 +4,7 @@ import threading
 import time
 import box
 from dotenv import dotenv_values
+import json
 
 import messages_pb2
 
@@ -72,26 +73,22 @@ def discover_devices():
             continue
 
 def listen_for_sensor_data():
-    global recent_sensor_data  # Declara que está usando a variável global
+    global recent_sensor_data
     udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     udp_socket.bind(('', GTW_UDP_PORT))
 
     while True:
         try:
-            # Recebe dados do socket
             data, addr = udp_socket.recvfrom(BUFFER_SIZE)
             print(f"[DEBUG] Dados brutos recebidos: {data}")
 
-            try:
-                sensor_data = json.loads(data.decode('utf-8'))
-            except json.JSONDecodeError as e:
-                print(f"[ERRO] Dados inválidos recebidos: {data}. Erro: {e}")
-                continue
+            # Desserializa os dados usando Protobuf
+            sensor_data = messages_pb2.SensorData()
+            sensor_data.ParseFromString(data)
 
             print(f"[DEBUG] Dados decodificados: {sensor_data}")
 
-            # Identifica o bloco pelo campo "Bloco"
-            block_id = sensor_data.get('Bloco')  # Usa 'Bloco' como identificador
+            block_id = sensor_data.Bloco
             if block_id is None:
                 print(f"[DEBUG] Dados recebidos sem 'Bloco': {sensor_data}")
                 continue

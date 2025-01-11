@@ -1,13 +1,14 @@
 import socket
 import struct
-import json
 import time
 import threading
 import box
 import random
+import json 
 
 from dotenv import dotenv_values
 
+import messages_pb2
 
 # Configurações
 env = box.Box(dotenv_values(".env"))
@@ -128,47 +129,38 @@ def tcp_server():
         finally:
             client_socket.close()
 
-# Função para enviar os dados de sensor para os GTW'S por UDP
 def send_udp_data():
     global power_on
 
     while True:
+        sensor_data = messages_pb2.SensorData()
+        sensor_data.Bloco = "A"
+        sensor_data.Estado = power_on
+        
         if power_on == 0:
-            sensor_data = {'Tensao': [0.0, 0.0, 0.0], 
-                            'Corrente': [0.0, 0.0, 0.0], 
-                            'Potencia': [0.0, 0.0, 0.0], 
-                            'Energia': [0.0, 0.0, 0.0], 
-                            'FatorPot': [0.0, 0.0, 0.0],
-                            'Bloco': "A",
-                            'Estado': power_on}
-
+            sensor_data.Tensao.extend([0.0, 0.0, 0.0])
+            sensor_data.Corrente.extend([0.0, 0.0, 0.0])
+            sensor_data.Potencia.extend([0.0, 0.0, 0.0])
+            sensor_data.Energia.extend([0.0, 0.0, 0.0])
+            sensor_data.FatorPot.extend([0.0, 0.0, 0.0])
         else:
-            sensor_data = {
-                'Tensao': [round(random.uniform(0, 220), 7) for _ in range(3)], 
-                'Corrente': [round(random.uniform(0, 15), 7) for _ in range(3)], 
-                'Potencia': [round(random.uniform(0, 1000), 7) for _ in range(3)], 
-                'Energia': [round(random.uniform(0, 150), 7) for _ in range(3)], 
-                'FatorPot': [round(random.random(), 7) for _ in range(3)],
-                'Bloco': "A",
-                'Estado': power_on
-            }
-            
-        # Converte os dados de sensor para string e depois para bytes
-        message_sensor = json.dumps(sensor_data).encode('utf-8')
+            sensor_data.Tensao.extend([round(random.uniform(0, 220), 7) for _ in range(3)])
+            sensor_data.Corrente.extend([round(random.uniform(0, 15), 7) for _ in range(3)])
+            sensor_data.Potencia.extend([round(random.uniform(0, 1000), 7) for _ in range(3)])
+            sensor_data.Energia.extend([round(random.uniform(0, 150), 7) for _ in range(3)])
+            sensor_data.FatorPot.extend([round(random.random(), 7) for _ in range(3)])
+
+        # Converte para bytes usando Protobuf
+        message_sensor = sensor_data.SerializeToString()
 
         # Criação do socket UDP
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
         for gtw in gateways:
-            gtw_ip = gtw.get("IP")  # Endereço do cliente UDP (alterar para o IP real)
-            gte_send_udp_port = int(gtw.get("PORTA ENVIO UDP"))      # Porta UDP para enviar os dados
-            
-            # Enviar os dados para o cliente UDP
+            gtw_ip = gtw.get("IP")
+            gte_send_udp_port = int(gtw.get("PORTA ENVIO UDP"))
             sock.sendto(message_sensor, (gtw_ip, gte_send_udp_port))
-            print(f"Dados do sensor do bloco 706 enviados para {gtw}.")
-            
+            print(f"Dados do sensor enviados para {gtw}.")
             sock.close()
-        
         time.sleep(5)
 
 # Função para esvaziar a lista de gateways a cada 30 segundos
