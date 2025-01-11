@@ -40,7 +40,7 @@ def send_multicast_device():
 
     MCAST_MSG = {
         'TIPO': "DEVICE",
-        'BLOCO': 727,
+        'BLOCO': "727",
         'IP': DEVC_IP, 
         'PORTA ENVIO TCP': DEVC_TCP_PORT
     }
