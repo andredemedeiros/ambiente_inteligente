@@ -134,22 +134,24 @@ def send_udp_data():
 
     while True:
         if power_on == 0:
-            sensor_data = {'Tensao': [0, 0, 0], 
-                            'Corrente': [0, 0, 0], 
-                            'Potencia': [0, 0, 0], 
-                            'Energia': [0, 0, 0], 
-                            'FatorPot': [0, 0, 0],
+            sensor_data = {'Tensao': [0.0, 0.0, 0.0], 
+                            'Corrente': [0.0, 0.0, 0.0], 
+                            'Potencia': [0.0, 0.0, 0.0], 
+                            'Energia': [0.0, 0.0, 0.0], 
+                            'FatorPot': [0.0, 0.0, 0.0],
                             'Bloco': "C",
                             'Estado': power_on}
 
         else:
-            sensor_data = {'Tensao': [random.randint(0, 220), random.randint(0, 220), random.randint(0, 220)], 
-                        'Corrente': [random.randint(0, 15), random.randint(0, 15), random.randint(0, 15)], 
-                        'Potencia': [random.randint(0, 1000), random.randint(0, 1000), random.randint(0, 1000)], 
-                        'Energia': [random.randint(0, 150), random.randint(0, 150), random.randint(0, 150)], 
-                        'FatorPot': [random.random(), random.random(), random.random()],
-                        'Bloco': "C",
-                        'Estado': power_on}
+            sensor_data = {
+                'Tensao': [round(random.uniform(0, 220), 7) for _ in range(3)], 
+                'Corrente': [round(random.uniform(0, 15), 7) for _ in range(3)], 
+                'Potencia': [round(random.uniform(0, 1000), 7) for _ in range(3)], 
+                'Energia': [round(random.uniform(0, 150), 7) for _ in range(3)], 
+                'FatorPot': [round(random.random(), 7) for _ in range(3)],
+                'Bloco': "C",
+                'Estado': power_on
+            }
             
         # Converte os dados de sensor para string e depois para bytes
         message_sensor = json.dumps(sensor_data).encode('utf-8')
