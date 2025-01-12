@@ -5,6 +5,8 @@ import time
 import threading
 import box
 
+import messages_pb2
+
 from dotenv import dotenv_values
 
 import paho.mqtt.client as paho
@@ -112,27 +114,39 @@ def discover_gtws():
             continue
 
 def tcp_server():
-    global power_on
+    """
+    Servidor TCP para receber comandos do gateway e reagir a eles.
+    """
+    global power_on  # Variável global para armazenar o estado atual do dispositivo
     
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.bind(('', DEVC_TCP_PORT))  # Escuta na porta 50706 ou 50727
+    server_socket.bind(('', DEVC_TCP_PORT))  # Porta configurada para escutar
     server_socket.listen(1)
     
-    print("Socket TCP disponível...")
+    print("Servidor TCP disponível e aguardando conexões...")
     
     while True:
         client_socket, addr = server_socket.accept()
+        print(f"Conexão recebida de {addr}")
         
         try:
             data = client_socket.recv(1024)  # Recebe dados do cliente
             if data:
-                try:
-                    power_on = int(data.decode('utf-8'))
-                    print(f"Valor de power_on definido em: {power_on}")
-                except ValueError:
-                    print(f"Dados recebidos inválidos: {data.decode('utf-8')}")
+                # Desserializa os dados recebidos usando Protobuf
+                state_change_msg = messages_pb2.StateChange()
+                state_change_msg.ParseFromString(data)
+                
+                # Processa o estado recebido
+                new_state = state_change_msg.new_state
+                if new_state.isdigit():
+                    power_on = int(new_state)
+                    print(f"[INFO] Novo estado recebido: {power_on} (power_on atualizado)")
+                else:
+                    print(f"[AVISO] Estado recebido inválido: {new_state}")
+        except messages_pb2.DecodeError as e:
+            print(f"[ERRO] Falha ao desserializar a mensagem Protobuf: {e}")
         except Exception as e:
-            print(f"Erro ao receber dados: {e}")
+            print(f"[ERRO] Erro ao processar dados recebidos: {e}")
         finally:
             client_socket.close()
 
@@ -141,23 +155,43 @@ def on_message(client, userdata, msg):
     global send_time, power_on
 
     if time.time() - send_time >= TIME_SAMPLE:
+        sensor_data = messages_pb2.SensorData()
+        sensor_data.Bloco = "706"
+        sensor_data.Estado = power_on
 
-        sensor_data = {'Tensao': [0, 0, 0], 
-                       'Corrente': [0, 0, 0], 
-                       'Potencia': [0, 0, 0], 
-                       'Energia': [0, 0, 0], 
-                       'FatorPot': [0, 0, 0],
-                       'Bloco': "706",
-                       'Estado': power_on}
+        if power_on == 0:
+            sensor_data.Tensao.extend([0.0, 0.0, 0.0])
+            sensor_data.Corrente.extend([0.0, 0.0, 0.0])
+            sensor_data.Potencia.extend([0.0, 0.0, 0.0])
+            sensor_data.Energia.extend([0.0, 0.0, 0.0])
+            sensor_data.FatorPot.extend([0.0, 0.0, 0.0])
 
-        if power_on == 1:
-            sensor_data = json.loads(str(msg.payload.decode('utf-8')))
-            sensor_data['Bloco'] = "706"  # Garante que o campo 'Bloco' sempre estará presente
-            sensor_data['Estado'] = power_on
+        else:
+            Tensao = json.loads(str(msg.payload.decode('utf-8'))).get("Tensao")
+            Corrente = json.loads(str(msg.payload.decode('utf-8'))).get("Corrente")
+            Potencia = json.loads(str(msg.payload.decode('utf-8'))).get("Potencia")
+            Energia = json.loads(str(msg.payload.decode('utf-8'))).get("Energia")
+            FatorPot = json.loads(str(msg.payload.decode('utf-8'))).get("FatorPot")
+            print(Tensao)
+            type(Tensao)
+            sensor_data.Tensao.extend(Tensao)
+            sensor_data.Corrente.extend(Corrente)
+            sensor_data.Potencia.extend(Potencia)
+            sensor_data.Energia.extend(Energia)
+            sensor_data.FatorPot.extend(FatorPot)
 
-        send_udp_data(sensor_data)
+        # Converte para bytes usando Protobuf
+        message_sensor = sensor_data.SerializeToString()
 
-        send_time = time.time()
+        # Criação do socket UDP
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        for gtw in gateways:
+            gtw_ip = gtw.get("IP")
+            gte_send_udp_port = int(gtw.get("PORTA ENVIO UDP"))
+            sock.sendto(message_sensor, (gtw_ip, gte_send_udp_port))
+            print(f"Dados do sensor enviados para {gtw}.")
+            sock.close()
+        time.sleep(5)
 
 # Função para enviar os dados de sensor para os GTW'S por UDP
 def send_udp_data(sensor_data):
