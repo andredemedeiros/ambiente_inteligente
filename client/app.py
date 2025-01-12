@@ -2,6 +2,10 @@ import streamlit as st
 import socket
 import json
 import time
+import threading
+import messages_pb2
+
+RECONNECT_INTERVAL = 10  # Intervalo em segundos para tentar reconectar
 
 # Configurações do Gateway
 GATEWAY_IP = "127.0.0.1"
