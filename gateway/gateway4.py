@@ -3,9 +3,9 @@ import struct
 import threading
 import time
 import box
+import json
 from dotenv import dotenv_values
 
-import messages_pb2
 
 # Configurações
 env = box.Box(dotenv_values(".env"))

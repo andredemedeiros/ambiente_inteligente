@@ -118,42 +118,73 @@ def tcp_server():
 def handle_client(client_socket):
     try:
         while True:
-            # Recebe comandos do cliente
-            command = client_socket.recv(1024).decode('utf-8').strip()
-            print(f"[DEBUG] Comando recebido: {command}")
-            if command.startswith("SET_STATE"):
-                _, bloc, state = command.split()
-                for dev in devices:
-                    if dev["BLOCO"] == bloc:
-                        change_device_state(bloc, dev["IP"], dev["PORTA ENVIO TCP"], state)
- 
+            # Recebe o comando do cliente
+            command_data = client_socket.recv(1024)
+            if not command_data:
+                break
 
-            if command == "RECIEVE_DATA":
-                # Formata os dados para exibição legível
+            # Desserializa o comando recebido
+            command_msg = messages_pb2.Command()
+            command_msg.ParseFromString(command_data)
+            print(command_msg)
+
+            # Processa o comando baseado no tipo
+            if command_msg.type == messages_pb2.Command.RECIEVE_DATA:
                 with recent_sensor_data_lock:
-                    formatted_data = "Dados recentes:\n"
-                    for block_id, data in recent_sensor_data.items():
-                        formatted_data += f"- Bloco {block_id}: {data}\n"
-                
-                print(f"[DEBUG] Dados enviados ao cliente:\n{formatted_data}")
-                client_socket.sendall(formatted_data.encode('utf-8'))
+                    # Create a SensorDataCollection to hold all the sensor data
+                    sensor_data_collection = messages_pb2.SensorDataCollection()
+
+                    # Loop through the recent sensor data and add them to the collection
+                    for block_id, sensor_data in recent_sensor_data.items():
+                        # Add the sensor data to the collection
+                        sensor_data_collection.sensor_data.append(sensor_data)
+
+                    # Serialize the collection to a byte string
+                    serialized_data = sensor_data_collection.SerializeToString()
+
+                # Send the serialized data to the client
+                print(f"[DEBUG] Dados enviados ao cliente: {len(serialized_data)} bytes")
+                client_socket.sendall(serialized_data)
+
+            elif command_msg.type == messages_pb2.Command.SET_STATE:
+                block_id = command_msg.block_id
+                state = "1" if command_msg.state else "0"
+                for dev in devices:
+                    if dev["BLOCO"] == block_id:
+                        change_device_state(block_id, dev["IP"], dev["PORTA ENVIO TCP"], state)
+                        break
+
     except Exception as e:
         print(f"[ERRO] Erro no cliente: {e}")
     finally:
         client_socket.close()
 
 def change_device_state(device_bloc, device_ip, device_port, state):
+    """
+    Envia o estado atualizado para um dispositivo usando Protobuf.
+    """
     try:
+        # Cria a mensagem StateChange e preenche com o novo estado
+        state_change_msg = messages_pb2.StateChange()
+        state_change_msg.new_state = state
+
+        # Serializa a mensagem para um formato binário
+        serialized_state = state_change_msg.SerializeToString()
+
+        # Conecta ao dispositivo e envia a mensagem serializada
         tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         tcp_socket.settimeout(10)
         tcp_socket.connect((device_ip, int(device_port)))
-        tcp_socket.send(state.encode())
-        print(f"Estado {state} enviado para bloco {device_bloc}")
+        tcp_socket.sendall(serialized_state)
+
+        print(f"[INFO] Estado {state} enviado para bloco {device_bloc} ({len(serialized_state)} bytes).")
     except (socket.timeout, socket.error) as e:
-        print(f"Erro na conexão TCP com {device_ip}:{device_port} - {e}")
+        print(f"[ERRO] Falha na conexão TCP com {device_ip}:{device_port}: {e}")
+        # Remove o dispositivo da lista em caso de erro de conexão
         devices[:] = [dev for dev in devices if not (dev['IP'] == device_ip and dev['PORTA ENVIO TCP'] == device_port)]
     finally:
         tcp_socket.close()
+
 
 def main():
     threading.Thread(target=send_multicast_gtw, daemon=True).start()

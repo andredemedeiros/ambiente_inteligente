@@ -5,8 +5,10 @@ import time
 import threading
 import box
 import random
+import messages_pb2
 
 from dotenv import dotenv_values
+
 
 
 # Configurações
@@ -104,27 +106,39 @@ def discover_gtws():
             continue
 
 def tcp_server():
-    global power_on
+    """
+    Servidor TCP para receber comandos do gateway e reagir a eles.
+    """
+    global power_on  # Variável global para armazenar o estado atual do dispositivo
     
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.bind(('', DEVC_TCP_PORT))  # Escuta na porta 50706 ou 50727
+    server_socket.bind(('', DEVC_TCP_PORT))  # Porta configurada para escutar
     server_socket.listen(1)
     
-    print("Socket TCP disponível...")
+    print("Servidor TCP disponível e aguardando conexões...")
     
     while True:
         client_socket, addr = server_socket.accept()
+        print(f"Conexão recebida de {addr}")
         
         try:
             data = client_socket.recv(1024)  # Recebe dados do cliente
             if data:
-                try:
-                    power_on = int(data.decode('utf-8'))
-                    print(f"Valor de power_on definido em: {power_on}")
-                except ValueError:
-                    print(f"Dados recebidos inválidos: {data.decode('utf-8')}")
+                # Desserializa os dados recebidos usando Protobuf
+                state_change_msg = messages_pb2.StateChange()
+                state_change_msg.ParseFromString(data)
+                
+                # Processa o estado recebido
+                new_state = state_change_msg.new_state
+                if new_state.isdigit():
+                    power_on = int(new_state)
+                    print(f"[INFO] Novo estado recebido: {power_on} (power_on atualizado)")
+                else:
+                    print(f"[AVISO] Estado recebido inválido: {new_state}")
+        except messages_pb2.DecodeError as e:
+            print(f"[ERRO] Falha ao desserializar a mensagem Protobuf: {e}")
         except Exception as e:
-            print(f"Erro ao receber dados: {e}")
+            print(f"[ERRO] Erro ao processar dados recebidos: {e}")
         finally:
             client_socket.close()
 
@@ -133,42 +147,35 @@ def send_udp_data():
     global power_on
 
     while True:
-        if power_on == 0:
-            sensor_data = {'Tensao': [0.0, 0.0, 0.0], 
-                            'Corrente': [0.0, 0.0, 0.0], 
-                            'Potencia': [0.0, 0.0, 0.0], 
-                            'Energia': [0.0, 0.0, 0.0], 
-                            'FatorPot': [0.0, 0.0, 0.0],
-                            'Bloco': "B",
-                            'Estado': power_on}
+        sensor_data = messages_pb2.SensorData()
+        sensor_data.Bloco = "B"
+        sensor_data.Estado = power_on
 
+        if power_on == 0:
+            sensor_data.Tensao.extend([0.0, 0.0, 0.0])
+            sensor_data.Corrente.extend([0.0, 0.0, 0.0])
+            sensor_data.Potencia.extend([0.0, 0.0, 0.0])
+            sensor_data.Energia.extend([0.0, 0.0, 0.0])
+            sensor_data.FatorPot.extend([0.0, 0.0, 0.0])
         else:
-            sensor_data = {
-                'Tensao': [round(random.uniform(0, 220), 7) for _ in range(3)], 
-                'Corrente': [round(random.uniform(0, 15), 7) for _ in range(3)], 
-                'Potencia': [round(random.uniform(0, 1000), 7) for _ in range(3)], 
-                'Energia': [round(random.uniform(0, 150), 7) for _ in range(3)], 
-                'FatorPot': [round(random.random(), 7) for _ in range(3)],
-                'Bloco': "B",
-                'Estado': power_on
-            }
+            sensor_data.Tensao.extend([round(random.uniform(0, 220), 7) for _ in range(3)])
+            sensor_data.Corrente.extend([round(random.uniform(0, 15), 7) for _ in range(3)])
+            sensor_data.Potencia.extend([round(random.uniform(0, 1000), 7) for _ in range(3)])
+            sensor_data.Energia.extend([round(random.uniform(0, 150), 7) for _ in range(3)])
+            sensor_data.FatorPot.extend([round(random.random(), 7) for _ in range(3)])
             
-        # Converte os dados de sensor para string e depois para bytes
-        message_sensor = json.dumps(sensor_data).encode('utf-8')
+        
+        # Converte para bytes usando Protobuf
+        message_sensor = sensor_data.SerializeToString()
 
         # Criação do socket UDP
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
         for gtw in gateways:
-            gtw_ip = gtw.get("IP")  # Endereço do cliente UDP (alterar para o IP real)
-            gte_send_udp_port = int(gtw.get("PORTA ENVIO UDP"))      # Porta UDP para enviar os dados
-            
-            # Enviar os dados para o cliente UDP
+            gtw_ip = gtw.get("IP")
+            gte_send_udp_port = int(gtw.get("PORTA ENVIO UDP"))
             sock.sendto(message_sensor, (gtw_ip, gte_send_udp_port))
-            print(f"Dados do sensor do bloco 706 enviados para {gtw}.")
-            
+            print(f"Dados do sensor enviados para {gtw}.")
             sock.close()
-        
         time.sleep(5)
 
 # Função para esvaziar a lista de gateways a cada 30 segundos

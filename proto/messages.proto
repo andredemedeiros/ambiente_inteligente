@@ -23,3 +23,23 @@ message GatewayInfo {
     string IP = 3;
     int32 PORTA_ENVIO_UDP = 4;
 }
+
+message SensorDataCollection {
+    repeated SensorData sensor_data = 1;
+}
+
+// Mensagem para enviar comandos ao gateway
+message Command {
+    enum CommandType {
+        RECIEVE_DATA = 0; // Solicitar dados
+        SET_STATE = 1;    // Alterar estado de um sensor
+    }
+
+    CommandType type = 1; // Tipo do comando
+    string block_id = 2;  // Identificador do bloco (apenas para SET_STATE)
+    bool state = 3;       // Estado desejado (apenas para SET_STATE)
+}
+
+message StateChange {
+    string new_state = 1;
+}

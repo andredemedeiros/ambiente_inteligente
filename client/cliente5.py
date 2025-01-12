@@ -12,7 +12,7 @@ def receive_data(client_socket):
             data = client_socket.recv(1024)
             if data:
                 # Desserializa os dados usando Protobuf
-                sensor_data = messages_pb2.SensorData()
+                sensor_data = messages_pb2.SensorDataCollection()
                 sensor_data.ParseFromString(data)
                 print(f"\n================= [DADOS DOS SENSORES] ================== \n {sensor_data}")
         except Exception as e:
@@ -21,7 +21,7 @@ def receive_data(client_socket):
 
 def send_commands(client_socket):
     """
-    Thread dedicada para enviar comandos ao gateway.
+    Thread dedicada para enviar comandos ao gateway usando Protobuf.
     """
     while True:
         try:
@@ -30,10 +30,26 @@ def send_commands(client_socket):
                 "- SET_STATE BLOCO (1-ON/0-OFF)\n"
                 "- RECIEVE_DATA\n"
                 )
-            if command:
-                client_socket.sendall(command.encode('utf-8'))
 
-            
+            # Cria a mensagem Command
+            command_msg = messages_pb2.Command()
+
+            if command == "RECIEVE_DATA":
+                command_msg.type = messages_pb2.Command.RECIEVE_DATA
+                command_msg.block_id = "999"
+                command_msg.state = bool(int(1))  # Converte 1 ou 0 para booleano
+                print("aaaaaaaaaaaaaaaaaaaaaa")
+                client_socket.sendall(command_msg.SerializeToString())
+
+            elif command.startswith("SET_STATE"):
+                _, block, state = command.split()
+                command_msg.type = messages_pb2.Command.SET_STATE
+                command_msg.block_id = block
+                command_msg.state = bool(int(state))  # Converte 1 ou 0 para booleano
+                print("BBBBBBBBBBBBBBBBBB")
+                client_socket.sendall(command_msg.SerializeToString())
+
+
         except Exception as e:
             print(f"[ERRO] Erro ao enviar comando: {e}")
             break
