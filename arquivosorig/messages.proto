@@ -1,10 +1,9 @@
 syntax = "proto3";
 
-package sensors;
-
 //python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. sensor.proto
 
-// Estrutura dos dados do sensor
+
+
 message SensorData {
     repeated float Tensao = 1;
     repeated float Corrente = 2;
@@ -15,7 +14,6 @@ message SensorData {
     int32 Estado = 7;
 }
 
-// Informações de um dispositivo
 message DeviceInfo {
     string TIPO = 1;
     string BLOCO = 2;
@@ -23,7 +21,6 @@ message DeviceInfo {
     int32 PORTA_ENVIO_TCP = 4;
 }
 
-// Informações de um gateway
 message GatewayInfo {
     string TIPO = 1;
     int32 GTW_ID = 2;
@@ -31,17 +28,15 @@ message GatewayInfo {
     int32 PORTA_ENVIO_UDP = 4;
 }
 
-// Coleção de dados do sensor
 message SensorDataCollection {
     repeated SensorData sensor_data = 1;
 }
 
-// Comando enviado ao gateway
+// Mensagem para enviar comandos ao gateway
 message Command {
     enum CommandType {
         RECIEVE_DATA = 0; // Solicitar dados
         SET_STATE = 1;    // Alterar estado de um sensor
-        LIST = 2;         // Solicitar lista de dispositivos
     }
 
     CommandType type = 1; // Tipo do comando
@@ -49,24 +44,25 @@ message Command {
     bool state = 3;       // Estado desejado (apenas para SET_STATE)
 }
 
-// Lista de dispositivos conectados
-message DeviceList {
-    repeated DeviceInfo devices = 1;
+message List {
+    string list = 1;
 }
+
+package sensors;
 
 // Definição da estrutura de um sensor
 message Sensor {
-    string name = 1;
-    string ip = 2;
-    int32 port = 3;
+  string name = 1;
+  string ip = 2;
+  int32 port = 3;
 }
 
 // Definição de uma lista de sensores
 message SensorList {
-    repeated Sensor sensors = 1;
+  repeated Sensor sensors = 1;
 }
 
-// Mudança de estado de um sensor
+
 message StateChange {
     string new_state = 1;
 }

@@ -7,6 +7,8 @@ from dotenv import dotenv_values
 import json
 
 import messages_pb2
+import sensor_pb2
+import sensor_pb2_grpc
 
 # Configurações
 env = box.Box(dotenv_values(".env"))
@@ -18,7 +20,7 @@ GTW_UDP_PORT = int(env.GTW_UDP_PORT)  # Porta para receber dados UDP de sensores
 BUFFER_SIZE = int(env.BUFFER_SIZE)
 TCP_PORT = 6000  # Porta TCP para comunicação com o cliente
 
-devices = []  # Lista de dispositivos disponíveis via multicast UDP
+devices = []  # Lista de dispositivos disponíveis via multicast UDP {'TIPO': 'DEVICE', 'BLOCO': 'C', 'IP': '127.0.0.1', 'PORTA ENVIO TCP': 50002}
 sensor_data_queue = []  # Fila para armazenar dados de sensores
 recent_sensor_data = {}
 recent_sensor_data_lock = threading.Lock()
@@ -99,6 +101,7 @@ def listen_for_sensor_data():
 
             # Adiciona à fila de dados recebidos
             sensor_data_queue.append(sensor_data)
+            print(devices)
         except Exception as e:
             print(f"[ERRO] Erro ao receber dados UDP: {e}")
 
@@ -131,18 +134,18 @@ def handle_client(client_socket):
             # Processa o comando baseado no tipo
             if command_msg.type == messages_pb2.Command.RECIEVE_DATA:
                 with recent_sensor_data_lock:
-                    # Create a SensorDataCollection to hold all the sensor data
+                    # Cria uma SensorDataCollection para segurar todos os dados do sensor
                     sensor_data_collection = messages_pb2.SensorDataCollection()
 
-                    # Loop through the recent sensor data and add them to the collection
+                    # Loop através dos dados dos sensores recentes e adiciona-os à coleção
                     for block_id, sensor_data in recent_sensor_data.items():
-                        # Add the sensor data to the collection
+                        # Adiciona os dados do sensor à coleção
                         sensor_data_collection.sensor_data.append(sensor_data)
 
-                    # Serialize the collection to a byte string
+                    # Serializa os dados para uma string de bytes
                     serialized_data = sensor_data_collection.SerializeToString()
 
-                # Send the serialized data to the client
+                # Envia os dados serializados ao cliente
                 print(f"[DEBUG] Dados enviados ao cliente: {len(serialized_data)} bytes")
                 client_socket.sendall(serialized_data)
 
@@ -154,9 +157,27 @@ def handle_client(client_socket):
                         change_device_state(block_id, dev["IP"], dev["PORTA ENVIO TCP"], state)
                         break
 
+            elif command_msg.type == messages_pb2.Command.LIST:
+                # Responde ao comando LIST com a lista de dispositivos
+                device_list = messages_pb2.DeviceList()
+
+                # Preenche a lista com os dispositivos conectados
+                for dev in devices:
+                    device_info = messages_pb2.DeviceInfo(
+                        TIPO="DEVICE",  # A informação 'TIPO' está sendo enviada como 'DEVICE'
+                        BLOCO=dev["BLOCO"],
+                        IP=dev["IP"],
+                        PORTA_ENVIO_TCP=dev["PORTA ENVIO TCP"]
+                    )
+                    device_list.devices.append(device_info)
+
+                # Serializa os dados da lista
+                serialized_data = device_list.SerializeToString()
+                print(f"[DEBUG] Lista de dispositivos enviada ao cliente ({len(serialized_data)} bytes).")
+                client_socket.sendall(serialized_data)
+
     except Exception as e:
-        print(f"[ERRO] Erro no cliente: {e}")
-    finally:
+        print(f"[ERRO] Erro ao processar a requisição: {e}")
         client_socket.close()
 
 def change_device_state(device_bloc, device_ip, device_port, state):
