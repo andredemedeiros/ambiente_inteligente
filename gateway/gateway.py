@@ -5,7 +5,7 @@ import time
 import box
 from dotenv import dotenv_values
 import json
-
+import grpc
 import messages_pb2
 import sensor_pb2
 import sensor_pb2_grpc
@@ -79,6 +79,29 @@ def listen_for_sensor_data():
     udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     udp_socket.bind(('', GTW_UDP_PORT))
 
+    # Dicionário para rastrear o último tempo de recebimento de dados de cada sensor
+    last_received_time = {}
+
+    def check_timeout():
+        while True:
+            time.sleep(10)  # Verifica a cada 10 segundos
+            current_time = time.time()
+            with recent_sensor_data_lock:
+                for block_id, last_time in list(last_received_time.items()):
+                    if current_time - last_time > 20:  # Timeout de 20 segundos
+                        print(f"[INFO] Sensor do bloco {block_id} excedeu o timeout. Removendo da lista.")
+                        # Remove o sensor da lista de dispositivos conectados
+                        devices[:] = [dev for dev in devices if dev['BLOCO'] != block_id]
+                        # Remove o sensor do dicionário de últimos tempos
+                        del last_received_time[block_id]
+                        # Remove o sensor do dicionário de dados recentes
+                        if block_id in recent_sensor_data:
+                            del recent_sensor_data[block_id]
+
+    # Inicia a thread para verificar o timeout
+    timeout_thread = threading.Thread(target=check_timeout, daemon=True)
+    timeout_thread.start()
+
     while True:
         try:
             data, addr = udp_socket.recvfrom(BUFFER_SIZE)
@@ -95,6 +118,9 @@ def listen_for_sensor_data():
                 print(f"[DEBUG] Dados recebidos sem 'Bloco': {sensor_data}")
                 continue
 
+            # Atualiza o último tempo de recebimento de dados do sensor
+            last_received_time[block_id] = time.time()
+
             # Atualiza o dado mais recente no vetor global protegido por Lock
             with recent_sensor_data_lock:
                 recent_sensor_data[block_id] = sensor_data
@@ -105,8 +131,7 @@ def listen_for_sensor_data():
         except Exception as e:
             print(f"[ERRO] Erro ao receber dados UDP: {e}")
 
-
-def tcp_server():
+def tcp_server():    #Ainda usado entre o cliente e o gateway
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.bind((GTW_IP, TCP_PORT))
     server_socket.listen(1)
@@ -149,13 +174,18 @@ def handle_client(client_socket):
                 print(f"[DEBUG] Dados enviados ao cliente: {len(serialized_data)} bytes")
                 client_socket.sendall(serialized_data)
 
-            elif command_msg.type == messages_pb2.Command.SET_STATE:
+            elif command_msg.type == messages_pb2.Command.SET_STATE:  #USANDO GRPC
                 block_id = command_msg.block_id
-                state = "1" if command_msg.state else "0"
+                state = "on" if command_msg.state else "off"
                 for dev in devices:
                     if dev["BLOCO"] == block_id:
-                        change_device_state(block_id, dev["IP"], dev["PORTA ENVIO TCP"], state)
-                        break
+                        ip_porta = dev["IP"] + ':' + str(dev["PORTA ENVIO TCP"])
+                        
+                        channel = grpc.insecure_channel(ip_porta)
+                        stub = sensor_pb2_grpc.SensorControlStub(channel)
+                        request = sensor_pb2.CommandRequest(command=state)
+                        response = stub.SendCommand(request)
+                        print(f"Resposta do Servidor gRPC: {response.message}")
 
             elif command_msg.type == messages_pb2.Command.LIST:
                 # Responde ao comando LIST com a lista de dispositivos
@@ -176,35 +206,47 @@ def handle_client(client_socket):
                 print(f"[DEBUG] Lista de dispositivos enviada ao cliente ({len(serialized_data)} bytes).")
                 client_socket.sendall(serialized_data)
 
+            elif command_msg.type == messages_pb2.Command.CHECK_STATE:  #usando GRPC
+                block_id = command_msg.block_id
+                for dev in devices:
+                    if dev["BLOCO"] == block_id:
+                        ip_porta = dev["IP"] + ':' + str(dev["PORTA ENVIO TCP"])
+                        
+                        channel = grpc.insecure_channel(ip_porta)
+                        stub = sensor_pb2_grpc.SensorControlStub(channel)
+                        request = sensor_pb2.CommandRequest(command="check")
+                        response = stub.SendCommand(request)
+                        print(f"Resposta do Servidor gRPC: {response.message}")
+
     except Exception as e:
         print(f"[ERRO] Erro ao processar a requisição: {e}")
         client_socket.close()
 
-def change_device_state(device_bloc, device_ip, device_port, state):
-    """
-    Envia o estado atualizado para um dispositivo usando Protobuf.
-    """
-    try:
-        # Cria a mensagem StateChange e preenche com o novo estado
-        state_change_msg = messages_pb2.StateChange()
-        state_change_msg.new_state = state
+# def change_device_state(device_bloc, device_ip, device_port, state):
+#     """
+#     Envia o estado atualizado para um dispositivo usando Protobuf.
+#     """
+#     try:
+#         # Cria a mensagem StateChange e preenche com o novo estado
+#         state_change_msg = messages_pb2.StateChange()
+#         state_change_msg.new_state = state
 
-        # Serializa a mensagem para um formato binário
-        serialized_state = state_change_msg.SerializeToString()
+#         # Serializa a mensagem para um formato binário
+#         serialized_state = state_change_msg.SerializeToString()
 
-        # Conecta ao dispositivo e envia a mensagem serializada
-        tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        tcp_socket.settimeout(10)
-        tcp_socket.connect((device_ip, int(device_port)))
-        tcp_socket.sendall(serialized_state)
+#         # Conecta ao dispositivo e envia a mensagem serializada
+#         tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+#         tcp_socket.settimeout(10)
+#         tcp_socket.connect((device_ip, int(device_port)))
+#         tcp_socket.sendall(serialized_state)
 
-        print(f"[INFO] Estado {state} enviado para bloco {device_bloc} ({len(serialized_state)} bytes).")
-    except (socket.timeout, socket.error) as e:
-        print(f"[ERRO] Falha na conexão TCP com {device_ip}:{device_port}: {e}")
-        # Remove o dispositivo da lista em caso de erro de conexão
-        devices[:] = [dev for dev in devices if not (dev['IP'] == device_ip and dev['PORTA ENVIO TCP'] == device_port)]
-    finally:
-        tcp_socket.close()
+#         print(f"[INFO] Estado {state} enviado para bloco {device_bloc} ({len(serialized_state)} bytes).")
+#     except (socket.timeout, socket.error) as e:
+#         print(f"[ERRO] Falha na conexão TCP com {device_ip}:{device_port}: {e}")
+#         # Remove o dispositivo da lista em caso de erro de conexão
+#         devices[:] = [dev for dev in devices if not (dev['IP'] == device_ip and dev['PORTA ENVIO TCP'] == device_port)]
+#     finally:
+#         tcp_socket.close()
 
 
 def main():
