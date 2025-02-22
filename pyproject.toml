@@ -12,6 +12,7 @@ streamlit = "^1.41.1"
 python-dotenv = "^1.0.1"
 paho-mqtt = "^2.1.0"
 python-box = "^7.3.0"
+grpcio = "^1.70.0"
 
 
 [build-system]
