@@ -212,7 +212,7 @@ def set_broker_channel():
 
     connection_parameters = pika.ConnectionParameters(
         host="localhost",
-        port=15672,
+        port=5672,
         credentials=pika.PlainCredentials(
             username="test",
             password="test"
@@ -223,7 +223,10 @@ def set_broker_channel():
     
     channel.queue_declare(
         queue="sensors_queue",
-        durable=True
+        durable=True,
+	arguments={
+            'x-message-ttl': 30000
+        }
     )
     
     channel.basic_consume(
@@ -232,16 +235,26 @@ def set_broker_channel():
         on_message_callback=minha_callback
     )
     
-    print(f'Listen RabbitMQ on Port 15672')
+    print(f'Listen RabbitMQ on Port 5672')
     channel.start_consuming()
 
     return channel
 
 def minha_callback(ch, method, properties, body):
-    # Desserializa o comando recebido
-    command_msg = messages_pb2.Command()
-    command_msg.ParseFromString(body)
-    print(command_msg)
+    print(f"Mensagem recebida: {body}")
+    try:
+        # Desserializa o comando recebido
+        command_msg = messages_pb2.SensorData()
+        command_msg.ParseFromString(body)
+        print(f"Comando desserializado: {command_msg}")
+    except Exception as e:
+        print(f"Erro ao desserializar a mensagem: {e}")
+
+#def minha_callback(ch, method, properties, body):
+#    # Desserializa o comando recebido
+#    command_msg = messages_pb2.Command()
+#    command_msg.ParseFromString(body)
+#    print(command_msg)
 
 channel = set_broker_channel()
 

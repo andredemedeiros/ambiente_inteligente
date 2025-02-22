@@ -229,7 +229,7 @@ def send_udp_data():
 
         channel.basic_publish(
             exchange="sensors_exchange",
-            routing_key="A",
+            routing_key="",
             body=message_sensor,
             properties=pika.BasicProperties(
                 delivery_mode=2 # mensagem persistente em caso de reinicialização do broker
@@ -249,7 +249,7 @@ def clear_gateways_list():
 def set_broker_channel():
     connection_parameters = pika.ConnectionParameters(
         host="localhost",
-        port=15672,
+        port=5672,
         credentials=pika.PlainCredentials(
             username="test",
             password="test"
