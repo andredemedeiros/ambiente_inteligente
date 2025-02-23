@@ -24,11 +24,17 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0csensor.proto')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0csensor.proto\x12\x06sensor\"!\n\x0e\x43ommandRequest\x12\x0f\n\x07\x63ommand\x18\x01 \x01(\t\"\"\n\x0f\x43ommandResponse\x12\x0f\n\x07message\x18\x01 \x01(\t2O\n\rSensorControl\x12>\n\x0bSendCommand\x12\x16.sensor.CommandRequest\x1a\x17.sensor.CommandResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'sensor_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
+  _globals['_COMMANDREQUEST']._serialized_start=24
+  _globals['_COMMANDREQUEST']._serialized_end=57
+  _globals['_COMMANDRESPONSE']._serialized_start=59
+  _globals['_COMMANDRESPONSE']._serialized_end=93
+  _globals['_SENSORCONTROL']._serialized_start=95
+  _globals['_SENSORCONTROL']._serialized_end=174
 # @@protoc_insertion_point(module_scope)
