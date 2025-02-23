@@ -47,22 +47,22 @@ message Command {
 }
 
 message Reveive_Data {
-    CommandType command = 1;
+    Command command = 1;
 }
 
 message Set_State {
-    CommandType command = 1;
+    Command command = 1;
     string block_id = 2;  // Identificador do bloco
     bool state = 3;       // Estado desejado
 }
 
 message List {
-    CommandType command = 1;
+    Command command = 1;
     string list_request = 2;
 }
 
 message Check_State {
-    CommandType command = 1;
+    Command command = 1;
     string block_id = 2;
 }
 
