@@ -85,21 +85,47 @@ def listen_for_sensor_data():
     # Dicionário para rastrear o último tempo de recebimento de dados de cada sensor
     last_received_time = {}
 
+    # Definindo a função de callback antes de usá-la
+    def minha_callback(ch, method, properties, body):
+        try:
+            sensor_data = messages_pb2.SensorData()
+            sensor_data.ParseFromString(body)
+
+            print(f"[DEBUG] Dados decodificados: {sensor_data}")
+
+            block_id = sensor_data.Bloco
+            if block_id is None:
+                print(f"[DEBUG] Dados recebidos sem 'Bloco': {sensor_data}")
+                return
+
+            # Atualiza o último tempo de recebimento de dados do sensor
+            last_received_time[block_id] = time.time()
+
+            # Atualiza o dado mais recente no vetor global protegido por Lock
+            with recent_sensor_data_lock:
+                recent_sensor_data[block_id] = sensor_data
+
+            # Adiciona à fila de dados recebidos
+            sensor_data_queue.append(sensor_data)
+            print(devices)
+        except Exception as e:
+            print(f"[ERRO] Erro ao receber dados UDP: {e}")
+
     connection_parameters = pika.ConnectionParameters(
         host="localhost",
         port=5672,
         credentials=pika.PlainCredentials(
             username="test",
             password="test"
-            )
         )
+    )
     
     channel = pika.BlockingConnection(connection_parameters).channel()
     
     channel.queue_declare(
         queue="sensors_queue",
         durable=True,
-	arguments={
+        arguments={
             'x-message-ttl': 30000
         }
     )
@@ -133,30 +159,6 @@ def listen_for_sensor_data():
     timeout_thread = threading.Thread(target=check_timeout, daemon=True)
     timeout_thread.start()
 
-    def minha_callback(ch, method, properties, body):
-        try:
-            sensor_data = messages_pb2.SensorData()
-            sensor_data.ParseFromString(body)
-
-            print(f"[DEBUG] Dados decodificados: {sensor_data}")
-
-            block_id = sensor_data.Bloco
-            if block_id is None:
-                print(f"[DEBUG] Dados recebidos sem 'Bloco': {sensor_data}")
-                return
-
-            # Atualiza o último tempo de recebimento de dados do sensor
-            last_received_time[block_id] = time.time()
-
-            # Atualiza o dado mais recente no vetor global protegido por Lock
-            with recent_sensor_data_lock:
-                recent_sensor_data[block_id] = sensor_data
-
-            # Adiciona à fila de dados recebidos
-            sensor_data_queue.append(sensor_data)
-            print(devices)
-        except Exception as e:
-            print(f"[ERRO] Erro ao receber dados UDP: {e}")
 
 def tcp_server():    #Ainda usado entre o cliente e o gateway
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
