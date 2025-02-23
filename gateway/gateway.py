@@ -278,20 +278,36 @@ def list_devices():
 # Endpoint to set the state of a device
 @app.post("/set-device-state/{block_id}/{state}")
 def set_device_state(block_id: str, state: bool):
-    # Here you would update the state of the device in your actual implementation
+    # Convert state to "on" or "off"
+    state_str = "on" if state else "off"
 
-    state = "on" if state else "off"
-
+    # Find the device by block_id
     for dev in devices:
         if dev["BLOCO"] == block_id:
             ip_porta = f"{dev['IP']}:{dev['PORTA ENVIO TCP']}"
 
-            channel = grpc.insecure_channel(ip_porta)
-            stub = sensor_pb2_grpc.SensorControlStub(channel)
-            request = sensor_pb2.CommandRequest(command=state)
-            response = stub.SendCommand(request)
-            print(f"[DEBUG] Resposta do Servidor gRPC: {response.message}")
-    return response
+            try:
+                # Use gRPC to communicate with the sensor
+                channel = grpc.insecure_channel(ip_porta)
+                stub = sensor_pb2_grpc.SensorControlStub(channel)
+                request = sensor_pb2.CommandRequest(command=state_str)
+                response = stub.SendCommand(request)
+                print(f"[DEBUG] Resposta do Servidor gRPC: {response.message}")
+
+                # Return the response message
+                return {
+                    "block_id": block_id,
+                    "state": state_str,
+                    "message": response.message
+                }
+            except grpc.RpcError as e:
+                raise HTTPException(status_code=500, detail=f"gRPC error: {e.details()}")
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Error communicating with sensor: {str(e)}")
+
+    # If the device is not found, return a 404 error
+    raise HTTPException(status_code=404, detail=f"No device found with block_id: {block_id}")
+
 
 # Endpoint to check the state of a device
 @app.get("/check-device-state/{block_id}")
