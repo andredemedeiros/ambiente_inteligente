@@ -67,16 +67,16 @@ def send_commands(client_socket):
                 "\n\nOpções de comando:\n"
                 "- SET_STATE BLOCO (ON/OFF)\n"
                 "- CHECK_STATE BLOCO\n"
-                "- RECEIVE_DATA\n"
+                "- RECIEVE_DATA\n"
                 "- LIST\n\n"
             )
 
             # Cria a mensagem Command
             command_msg = messages_pb2.Command()
 
-            if command == "RECEIVE_DATA":
+            if command == "RECIEVE_DATA":
                 # Envia o comando para receber dados de todos os sensores
-                command_msg.type = messages_pb2.Command.RECEIVE_DATA
+                command_msg.type = messages_pb2.Command.RECIEVE_DATA
                 command_msg.block_id = "999"  # Apenas um valor placeholder
                 command_msg.state = bool(int(1))  # Apenas para preencher o campo state
                 client_socket.sendall(command_msg.SerializeToString())
@@ -106,16 +106,26 @@ def send_commands(client_socket):
                     break
 
             elif command.startswith("SET_STATE"):  # Modificado para utilizar gRPC
-                _, block, state = command.split()
-                for device in Lista_ip_porta:
-                    if device["BLOCO"] == block:
-                        ip_porta = device["IP"] + ':' + str(device["PORTA ENVIO TCP"])
+                # _, block, state = command.split()
+                # for device in Lista_ip_porta:
+                #     if device["BLOCO"] == block:
+                #         ip_porta = device["IP"] + ':' + str(device["PORTA ENVIO TCP"])
                         
-                        channel = grpc.insecure_channel(ip_porta)
-                        stub = sensor_pb2_grpc.SensorControlStub(channel)
-                        request = sensor_pb2.CommandRequest(command=state)
-                        response = stub.SendCommand(request)
-                        print(f"Resposta do Servidor gRPC: {response.message}")
+                #         channel = grpc.insecure_channel(ip_porta)
+                #         stub = sensor_pb2_grpc.SensorControlStub(channel)
+                #         request = sensor_pb2.CommandRequest(command=state)
+                #         response = stub.SendCommand(request)
+                #         print(f"Resposta do Servidor gRPC: {response.message}")
+                command_msg.type = messages_pb2.Command.SET_STATE
+                command_msg.block_id = "999"  # Apenas um valor placeholder
+                command_msg.state = bool(int(1))  # Apenas para preencher o campo state
+                client_socket.sendall(command_msg.SerializeToString())
+
+                # Aguardando a resposta do servidor
+                data = client_socket.recv(1024)  # Espera pela resposta com a lista de dispositivos
+                device_list = messages_pb2.DeviceList()
+                device_list.ParseFromString(data)
+
 
             elif command.startswith("CHECK_STATE"):  # Modificado para utilizar gRPC
                 _, block = command.split()

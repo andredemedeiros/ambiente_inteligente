@@ -7,22 +7,11 @@ import box
 import random
 import messages_pb2
 
-import socket
-import struct
-import json
-import time
-import threading
-import box
-import random
 import grpc
 from concurrent import futures
-import messages_pb2
 import sensor_pb2
 import sensor_pb2_grpc
 from dotenv import dotenv_values
-
-import sensor_pb2
-import sensor_pb2_grpc
 
 
 
