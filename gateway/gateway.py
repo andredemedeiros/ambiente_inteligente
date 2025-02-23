@@ -386,17 +386,66 @@ def set_broker_channel():
 
     return channel
 
+# def minha_callback(ch, method, properties, body):
+#     print(f"Mensagem recebida: {body}")
+#     try:
+#         # Desserializa o comando recebido
+#         command_msg = messages_pb2.SensorData()
+#         command_msg.ParseFromString(body)
+#         print(f"Comando desserializado: {command_msg}")
+#     except Exception as e:
+#         print(f"Erro ao desserializar a mensagem: {e}")
+
+last_received_time = {}
 def minha_callback(ch, method, properties, body):
-    print(f"Mensagem recebida: {body}")
+    global recent_sensor_data
+
     try:
         # Desserializa o comando recebido
-        command_msg = messages_pb2.SensorData()
-        command_msg.ParseFromString(body)
-        print(f"Comando desserializado: {command_msg}")
+        sensor_data = messages_pb2.SensorData()
+        sensor_data.ParseFromString(body)
+
+        print(f"[DEBUG] Dados decodificados: {sensor_data}")
+
+        block_id = sensor_data.Bloco
+        
+        if block_id is None:
+            print(f"[DEBUG] Dados recebidos sem 'Bloco': {sensor_data}")
+            return 
+        
+        # Atualiza o último tempo de recebimento de dados do sensor
+        last_received_time[block_id] = time.time()
+
+        # Atualiza o dado mais recente no vetor global protegido por Lock
+        with recent_sensor_data_lock:
+            recent_sensor_data[block_id] = sensor_data
+
+        # Adiciona à fila de dados recebidos
+        sensor_data_queue.append(sensor_data)
+        print(devices)
     except Exception as e:
-        print(f"Erro ao desserializar a mensagem: {e}")
+        print(f"[ERRO] Erro ao receber dados UDP: {e}")
 
 channel = set_broker_channel()
+
+def check_timeout():
+    global recent_sensor_data
+    global last_received_time
+
+    while True:
+        time.sleep(10)  # Verifica a cada 10 segundos
+        current_time = time.time()
+        with recent_sensor_data_lock:
+            for block_id, last_time in list(last_received_time.items()):
+                if current_time - last_time > 20:  # Timeout de 20 segundos
+                    print(f"[INFO] Sensor do bloco {block_id} excedeu o timeout. Removendo da lista.")
+                    # Remove o sensor da lista de dispositivos conectados
+                    devices[:] = [dev for dev in devices if dev['BLOCO'] != block_id]
+                    # Remove o sensor do dicionário de últimos tempos
+                    del last_received_time[block_id]
+                    # Remove o sensor do dicionário de dados recentes
+                    if block_id in recent_sensor_data:
+                        del recent_sensor_data[block_id]
 
 def main():
     threading.Thread(target=send_multicast_gtw, daemon=True).start()
@@ -404,6 +453,7 @@ def main():
    # threading.Thread(target=listen_for_sensor_data, daemon=True).start()
    # threading.Thread(target=tcp_server, daemon=True).start()
     threading.Thread(target=run_rest_api, daemon=True).start()
+    threading.Thread(target=check_timeout, daemon=True).start()
 
     while True:
         time.sleep(1)
