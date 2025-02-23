@@ -159,6 +159,8 @@ def listen_for_sensor_data():
     timeout_thread = threading.Thread(target=check_timeout, daemon=True)
     timeout_thread.start()
 
+    while True:
+        time.sleep(1)
 
 def tcp_server():    #Ainda usado entre o cliente e o gateway
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
