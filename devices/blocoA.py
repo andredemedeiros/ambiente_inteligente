@@ -1,10 +1,12 @@
 import socket
 import struct
-import json
+
 import time
 import threading
 import box
 import random
+
+import json
 import grpc
 from concurrent import futures
 import messages_pb2
@@ -203,16 +205,6 @@ def send_udp_data():
 
         # Converte para bytes usando Protobuf
         message_sensor = sensor_data.SerializeToString()
-
-        # # Criação do socket UDP
-        # sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        # for gtw in gateways:
-        #     gtw_ip = gtw.get("IP")
-        #     gte_send_udp_port = int(gtw.get("PORTA ENVIO UDP"))
-        #     sock.sendto(message_sensor, (gtw_ip, gte_send_udp_port))
-        #     print(f"Dados do sensor enviados para {gtw}.")
-        #     sock.close()
-        # time.sleep(5)
 
         channel.basic_publish(
             exchange="sensors_exchange",

@@ -12,6 +12,8 @@ import sensor_pb2
 import sensor_pb2_grpc
 from dotenv import dotenv_values
 
+import pika
+
 # Configurações
 env = box.Box(dotenv_values(".env"))
 
@@ -106,7 +108,6 @@ def discover_gtws():
         except socket.timeout:
             continue
 
-#essa função vai ser inútil agora
 #def tcp_server():
     """
     Servidor TCP para receber comandos do gateway e reagir a eles.
@@ -144,9 +145,6 @@ def discover_gtws():
         finally:
             client_socket.close()
 
-
-
-
 class SensorControlServicer(sensor_pb2_grpc.SensorControlServicer):
     def SendCommand(self, request, context):
         global power_on
@@ -182,8 +180,6 @@ def serve():
         server.stop(0)
         print("Servidor encerrado.")
 
-
-# Função para enviar os dados de sensor para os GTW'S por UDP
 def send_udp_data():
     global power_on
 
@@ -208,16 +204,16 @@ def send_udp_data():
         # Converte para bytes usando Protobuf
         message_sensor = sensor_data.SerializeToString()
 
-        # Criação do socket UDP
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        for gtw in gateways:
-            gtw_ip = gtw.get("IP")
-            gte_send_udp_port = int(gtw.get("PORTA ENVIO UDP"))
-            sock.sendto(message_sensor, (gtw_ip, gte_send_udp_port))
-            print(f"Dados do sensor enviados para {gtw}.")
-            sock.close()
+        channel.basic_publish(
+            exchange="sensors_exchange",
+            routing_key="",
+            body=message_sensor,
+            properties=pika.BasicProperties(
+                delivery_mode=2 # mensagem persistente em caso de reinicialização do broker
+            )
+        )
+        print(f"Dados do sensor enviados para o broker.")
         time.sleep(5)
-
 
 # Função para esvaziar a lista de gateways a cada 30 segundos
 def clear_gateways_list():
@@ -226,6 +222,20 @@ def clear_gateways_list():
         global gateways
         gateways.clear()  # Esvazia a lista de gateways
         print("Lista de gateways esvaziada.")
+
+def set_broker_channel():
+    connection_parameters = pika.ConnectionParameters(
+        host="localhost",
+        port=5672,
+        credentials=pika.PlainCredentials(
+            username="test",
+            password="test"
+            )
+        )
+
+    return pika.BlockingConnection(connection_parameters).channel()
+
+channel = set_broker_channel()
 
 def main():
 
