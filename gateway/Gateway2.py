@@ -9,22 +9,67 @@ import grpc
 import messages_pb2
 import sensor_pb2
 import sensor_pb2_grpc
-import messages_final_pb2
+import paho.mqtt.client as mqtt
+import ssl
+import os
+
+from broker_multicast import discover_broker
 
 # Configurações
 env = box.Box(dotenv_values(".env"))
 
-MCAST_GRP = env.MCAST_GRP
-MCAST_PORT = int(env.MCAST_PORT)
-GTW_IP = env.GTW_IP
-GTW_UDP_PORT = int(env.GTW_UDP_PORT)  # Porta para receber dados UDP de sensores
-BUFFER_SIZE = int(env.BUFFER_SIZE)
-TCP_PORT = 6000  # Porta TCP para comunicação com o cliente
+MCAST_GRP = os.getenv("MCAST_GRP", "228.0.0.8").strip()
+MCAST_PORT = int(os.getenv("MCAST_PORT", "6789").strip())
+GTW_IP = os.getenv("GTW_IP", "127.0.0.1").strip()
+GTW_UDP_PORT = int(os.getenv("GTW_UDP_PORT", "12345").strip())
+BUFFER_SIZE = int(os.getenv("BUFFER_SIZE", "1024").split("#")[0].strip())
+TCP_PORT = int(os.getenv("TCP_PORT", "6000").strip())
+
 
 devices = []  # Lista de dispositivos disponíveis via multicast UDP {'TIPO': 'DEVICE', 'BLOCO': 'C', 'IP': '127.0.0.1', 'PORTA ENVIO TCP': 50002}
 sensor_data_queue = []  # Fila para armazenar dados de sensores
 recent_sensor_data = {}
 recent_sensor_data_lock = threading.Lock()
+
+# Credenciais MQTT (você pode defini-las no .env também)
+ACESS_NAME     = env.get("ACESS_NAME", "Dispositivo")
+ACESS_PASSWORD = env.get("ACESS_PASSWORD", "INOVANDo2023")
+
+# --- Configuração MQTT via Broker Descoberto ---
+
+
+# Descobre o broker via multicast (função importada)
+broker_ip, broker_port = discover_broker()
+print(f"[INFO] Broker descoberto: {broker_ip}:{broker_port}")
+
+
+# Define callbacks para o MQTT
+def on_connect(client, userdata, flags, rc):
+   if rc == 0:
+       print("[INFO] Conectado ao Broker MQTT!")
+       client.subscribe("sensors/data")
+   else:
+       print(f"[ERRO] Falha na conexão MQTT, código: {rc}")
+
+
+def on_message(client, userdata, msg):
+   print(f"[INFO] Mensagem recebida: {msg.topic} -> {msg.payload.decode('utf-8')}")
+
+
+# Cria o cliente MQTT usando WebSockets e configura os parâmetros de conexão
+client = client = mqtt.Client()
+client.username_pw_set(ACESS_NAME, ACESS_PASSWORD)
+client.tls_set_context(ssl.create_default_context())
+
+
+client.on_connect = on_connect
+client.on_message = on_message
+
+
+print(f"[INFO] Conectando ao Broker MQTT via WebSockets (WSS) em {broker_ip}:{broker_port}...")
+client.connect(broker_ip, broker_port, 60)
+client.loop_start()  # Inicia o loop MQTT em thread separada
+
 
 def send_multicast_gtw():
     MCAST_MSG = {
@@ -147,81 +192,80 @@ def tcp_server():    #Ainda usado entre o cliente e o gateway
 def handle_client(client_socket):
     try:
         while True:
-            # Recebe os dados do cliente
+            # Recebe o comando do cliente
             command_data = client_socket.recv(1024)
             if not command_data:
                 break
 
-            # Desserializa a mensagem recebida
-            command_msg = messages_final_pb2.Command()
+            # Desserializa o comando recebido
+            command_msg = messages_pb2.Command()
             command_msg.ParseFromString(command_data)
-            print(f"[DEBUG] Comando recebido: {command_msg}")
+            print(command_msg)
 
-            # Identifica qual comando foi enviado usando `WhichOneof`
-            command_type = command_msg.WhichOneof("payload")
-
-            if command_type == "receive_data":
+            # Processa o comando baseado no tipo
+            if command_msg.type == messages_pb2.Command.RECEIVE_DATA:
                 with recent_sensor_data_lock:
+                    # Cria uma SensorDataCollection para segurar todos os dados do sensor
                     sensor_data_collection = messages_pb2.SensorDataCollection()
 
-                    # Adiciona os dados dos sensores à coleção
+                    # Loop através dos dados dos sensores recentes e adiciona-os à coleção
                     for block_id, sensor_data in recent_sensor_data.items():
+                        # Adiciona os dados do sensor à coleção
                         sensor_data_collection.sensor_data.append(sensor_data)
 
+                    # Serializa os dados para uma string de bytes
                     serialized_data = sensor_data_collection.SerializeToString()
 
-                # Envia os dados ao cliente
+                # Envia os dados serializados ao cliente
                 print(f"[DEBUG] Dados enviados ao cliente: {len(serialized_data)} bytes")
                 client_socket.sendall(serialized_data)
 
-            elif command_type == "set_state":  # Usando gRPC
-                block_id = command_msg.set_state.block_id
-                state = "on" if command_msg.set_state.state else "off"
-
+            elif command_msg.type == messages_pb2.Command.SET_STATE:  #USANDO GRPC
+                block_id = command_msg.block_id
+                state = "on" if command_msg.state else "off"
                 for dev in devices:
                     if dev["BLOCO"] == block_id:
-                        ip_porta = f"{dev['IP']}:{dev['PORTA ENVIO TCP']}"
-
+                        ip_porta = dev["IP"] + ':' + str(dev["PORTA ENVIO TCP"])
+                        
                         channel = grpc.insecure_channel(ip_porta)
                         stub = sensor_pb2_grpc.SensorControlStub(channel)
                         request = sensor_pb2.CommandRequest(command=state)
                         response = stub.SendCommand(request)
-                        print(f"[DEBUG] Resposta do Servidor gRPC: {response.message}")
+                        print(f"Resposta do Servidor gRPC: {response.message}")
 
-            elif command_type == "list":
-                # Cria a lista de dispositivos
+            elif command_msg.type == messages_pb2.Command.LIST:
+                # Responde ao comando LIST com a lista de dispositivos
                 device_list = messages_pb2.DeviceList()
 
+                # Preenche a lista com os dispositivos conectados
                 for dev in devices:
                     device_info = messages_pb2.DeviceInfo(
-                        TIPO="DEVICE",
+                        TIPO="DEVICE",  # A informação 'TIPO' está sendo enviada como 'DEVICE'
                         BLOCO=dev["BLOCO"],
                         IP=dev["IP"],
                         PORTA_ENVIO_TCP=dev["PORTA ENVIO TCP"]
                     )
                     device_list.devices.append(device_info)
 
+                # Serializa os dados da lista
                 serialized_data = device_list.SerializeToString()
                 print(f"[DEBUG] Lista de dispositivos enviada ao cliente ({len(serialized_data)} bytes).")
                 client_socket.sendall(serialized_data)
 
-            elif command_type == "check_state":  # Usando gRPC
-                block_id = command_msg.check_state.block_id
-
+            elif command_msg.type == messages_pb2.Command.CHECK_STATE:  #usando GRPC
+                block_id = command_msg.block_id
                 for dev in devices:
                     if dev["BLOCO"] == block_id:
-                        ip_porta = f"{dev['IP']}:{dev['PORTA ENVIO TCP']}"
-
+                        ip_porta = dev["IP"] + ':' + str(dev["PORTA ENVIO TCP"])
+                        
                         channel = grpc.insecure_channel(ip_porta)
                         stub = sensor_pb2_grpc.SensorControlStub(channel)
                         request = sensor_pb2.CommandRequest(command="check")
                         response = stub.SendCommand(request)
-                        print(f"[DEBUG] Resposta do Servidor gRPC: {response.message}")
+                        print(f"Resposta do Servidor gRPC: {response.message}")
 
     except Exception as e:
         print(f"[ERRO] Erro ao processar a requisição: {e}")
-
-    finally:
         client_socket.close()
 
 # def change_device_state(device_bloc, device_ip, device_port, state):

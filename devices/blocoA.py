@@ -1,13 +1,5 @@
 import socket
 import struct
-import time
-import threading
-import box
-import random
-import json 
-
-import socket
-import struct
 import json
 import time
 import threading
@@ -19,11 +11,6 @@ import messages_pb2
 import sensor_pb2
 import sensor_pb2_grpc
 from dotenv import dotenv_values
-
-import sensor_pb2
-import sensor_pb2_grpc
-
-import messages_pb2
 
 import pika
 
