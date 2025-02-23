@@ -276,14 +276,22 @@ def list_devices():
     return devices
 
 # Endpoint to set the state of a device
-@app.post("/set-device-state")
+@app.post("/set-device-state/{block_id}/{state}")
 def set_device_state(block_id: str, state: bool):
     # Here you would update the state of the device in your actual implementation
-    return {
-        "block_id": block_id,
-        "state": state,
-        "message": f"State of device {block_id} set to {'on' if state else 'off'}"
-    }
+
+    state = "on" if state else "off"
+
+    for dev in devices:
+        if dev["BLOCO"] == block_id:
+            ip_porta = f"{dev['IP']}:{dev['PORTA ENVIO TCP']}"
+
+            channel = grpc.insecure_channel(ip_porta)
+            stub = sensor_pb2_grpc.SensorControlStub(channel)
+            request = sensor_pb2.CommandRequest(command=state)
+            response = stub.SendCommand(request)
+            print(f"[DEBUG] Resposta do Servidor gRPC: {response.message}")
+    return response
 
 # Endpoint to check the state of a device
 @app.get("/check-device-state/{block_id}")

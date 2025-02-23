@@ -1,0 +1,7 @@
+### Set device state to ON (POST)
+POST http://127.0.0.1:8000/set-device-state/B/true HTTP/1.1
+Content-Type: application/json
+
+### Set device state to OFF (POST)
+POST http://127.0.0.1:8000/set-device-state/B/false HTTP/1.1
+Content-Type: application/json
