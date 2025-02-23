@@ -6,10 +6,14 @@ import box
 from dotenv import dotenv_values
 import json
 import grpc
+import uvicorn
 import messages_pb2
 import sensor_pb2
 import sensor_pb2_grpc
-import messages_final_pb2
+from fastapi import FastAPI, HTTPException
+from google.protobuf.json_format import MessageToDict
+
+
 
 # Configurações
 env = box.Box(dotenv_values(".env"))
@@ -143,7 +147,7 @@ def tcp_server():    #Ainda usado entre o cliente e o gateway
         print(f"Cliente conectado: {client_addr}")
         client_thread = threading.Thread(target=handle_client, args=(client_socket,))
         client_thread.start()
-
+ 
 def handle_client(client_socket):
     try:
         while True:
@@ -153,7 +157,7 @@ def handle_client(client_socket):
                 break
 
             # Desserializa a mensagem recebida
-            command_msg = messages_final_pb2.Command()
+            command_msg = messages_pb2.Command()
             command_msg.ParseFromString(command_data)
             print(f"[DEBUG] Comando recebido: {command_msg}")
 
@@ -251,11 +255,88 @@ def handle_client(client_socket):
 #         tcp_socket.close()
 
 
+app = FastAPI()
+
+# Endpoint to get sensor data
+@app.get("/sensor-data")
+def get_sensor_data():
+    with recent_sensor_data_lock:
+        # Convert Protobuf messages to dictionaries
+        sensor_data_dict = {
+            block_id: MessageToDict(sensor_data, preserving_proto_field_name=True)
+            for block_id, sensor_data in recent_sensor_data.items()
+        }
+        
+        
+        return sensor_data_dict
+
+# Endpoint to list connected devices
+@app.get("/devices")
+def list_devices():
+    return devices
+
+# Endpoint to set the state of a device
+@app.post("/set-device-state")
+def set_device_state(block_id: str, state: bool):
+    # Here you would update the state of the device in your actual implementation
+    return {
+        "block_id": block_id,
+        "state": state,
+        "message": f"State of device {block_id} set to {'on' if state else 'off'}"
+    }
+
+# Endpoint to check the state of a device
+@app.get("/check-device-state/{block_id}")
+def check_device_state(block_id):
+    
+    for dev in devices:
+        if dev["BLOCO"] == block_id:
+            sensor_ip = dev["IP"]
+            sensor_port = dev["PORTA ENVIO TCP"]
+            sensor_address = f"{sensor_ip}:{sensor_port}"
+
+            try:
+                # Use gRPC to communicate with the sensor
+                channel = grpc.insecure_channel(sensor_address)
+                stub = sensor_pb2_grpc.SensorControlStub(channel)
+                request = sensor_pb2.CommandRequest(command="check")
+                response = stub.SendCommand(request)
+
+                # Return the sensor's state
+                return {"block_id": block_id, "state": response.message}
+            except grpc.RpcError as e:
+                raise HTTPException(status_code=500, detail=f"gRPC error: {e.details()}")
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Error communicating with sensor: {str(e)}")
+    else:
+        raise HTTPException(status_code=404, detail=f"No device found with block_id: {block_id}")
+
+def run_rest_api():
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+def protobuf_to_dict(proto_obj):
+    """
+    Converts a Protobuf message to a Python dictionary.
+    """
+    result = {}
+    for field in proto_obj.DESCRIPTOR.fields:
+        value = getattr(proto_obj, field.name)
+        if field.type == field.TYPE_MESSAGE:  # Nested Protobuf message
+            if field.label == field.LABEL_REPEATED:  # Repeated field (list)
+                result[field.name] = [protobuf_to_dict(item) for item in value]
+            else:
+                result[field.name] = protobuf_to_dict(value)
+        else:  # Scalar field
+            result[field.name] = value
+    return result
+
+
 def main():
     threading.Thread(target=send_multicast_gtw, daemon=True).start()
     threading.Thread(target=discover_devices, daemon=True).start()
     threading.Thread(target=listen_for_sensor_data, daemon=True).start()
-    threading.Thread(target=tcp_server, daemon=True).start()
+   # threading.Thread(target=tcp_server, daemon=True).start()
+    threading.Thread(target=run_rest_api, daemon=True).start()
 
     while True:
         time.sleep(1)

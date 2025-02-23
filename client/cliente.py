@@ -59,7 +59,7 @@ def send_commands(client_socket):
     """
     Thread dedicada para enviar comandos ao gateway usando Protobuf.
     """
-    global Lista_ip_porta  # Vamos usar essa variável para armazenar a lista de dispositivos
+    global Lista_ip_porta  # Para armazenar a lista de dispositivos
 
     while True:
         try:
@@ -67,87 +67,60 @@ def send_commands(client_socket):
                 "\n\nOpções de comando:\n"
                 "- SET_STATE BLOCO (ON/OFF)\n"
                 "- CHECK_STATE BLOCO\n"
-                "- RECIEVE_DATA\n"
+                "- RECEIVE_DATA\n"
                 "- LIST\n\n"
-            )
+            ).strip()
 
-            # Cria a mensagem Command
-            command_msg = messages_pb2.Command()
+            command_msg = messages_pb2.Command()  # Criar mensagem do tipo Command
 
-            if command == "RECIEVE_DATA":
+            if command == "RECEIVE_DATA":
                 # Envia o comando para receber dados de todos os sensores
-                command_msg.type = messages_pb2.Command.RECIEVE_DATA
-                command_msg.block_id = "999"  # Apenas um valor placeholder
-                command_msg.state = bool(int(1))  # Apenas para preencher o campo state
+                command_msg.receive_data.CopyFrom(messages_pb2.ReceiveData())  
                 client_socket.sendall(command_msg.SerializeToString())
 
                 try:
                     data = client_socket.recv(1024)
                     if data:
-                        # Desserializa os dados usando Protobuf
                         sensor_data = messages_pb2.SensorDataCollection()
                         sensor_data.ParseFromString(data)
-                        print("\n=========================== [DADOS DOS SENSORES] ==============================")
-                        for i in range(0, len(sensor_data.sensor_data), 3):  # Agrupar os dados a cada 3 elementos
-                            sensor_group = sensor_data.sensor_data[i:i+3]
-                            
-                            print(f"Bloco: {sensor_group[0].Bloco}")
-                            for idx, sensor in enumerate(sensor_group):
-                                print(f"\nBloco: {sensor.Bloco}")
-                                print(f"  Tensao: {sensor.Tensao}")
-                                print(f"  Corrente: {sensor.Corrente}")
-                                print(f"  Potencia: {sensor.Potencia}")
-                                print(f"  Energia: {sensor.Energia}")
-                                print(f"  FatorPot: {sensor.FatorPot}")
-                        print("================================================================================")
+                        print("\n========= [DADOS DOS SENSORES] =========")
+                        for sensor in sensor_data.sensor_data:
+                            print(f"\nBloco: {sensor.Bloco}")
+                            print(f"  Tensao: {sensor.Tensao}")
+                            print(f"  Corrente: {sensor.Corrente}")
+                            print(f"  Potencia: {sensor.Potencia}")
+                            print(f"  Energia: {sensor.Energia}")
+                            print(f"  FatorPot: {sensor.FatorPot}")
+                        print("=========================================")
 
                 except Exception as e:
                     print(f"[ERRO] Erro ao receber dados: {e}")
                     break
 
-            elif command.startswith("SET_STATE"):  # Modificado para utilizar gRPC
-                # _, block, state = command.split()
-                # for device in Lista_ip_porta:
-                #     if device["BLOCO"] == block:
-                #         ip_porta = device["IP"] + ':' + str(device["PORTA ENVIO TCP"])
-                        
-                #         channel = grpc.insecure_channel(ip_porta)
-                #         stub = sensor_pb2_grpc.SensorControlStub(channel)
-                #         request = sensor_pb2.CommandRequest(command=state)
-                #         response = stub.SendCommand(request)
-                #         print(f"Resposta do Servidor gRPC: {response.message}")
-                command_msg.type = messages_pb2.Command.SET_STATE
-                command_msg.block_id = "999"  # Apenas um valor placeholder
-                command_msg.state = bool(int(1))  # Apenas para preencher o campo state
+            elif command.startswith("SET_STATE"):  # Usando gRPC
+                _, block, state_str = command.split()
+                state = state_str.upper() == "ON"
+
+                command_msg.set_state.block_id = block
+                command_msg.set_state.state = state
                 client_socket.sendall(command_msg.SerializeToString())
 
-                # Aguardando a resposta do servidor
-                data = client_socket.recv(1024)  # Espera pela resposta com a lista de dispositivos
-                device_list = messages_pb2.DeviceList()
-                device_list.ParseFromString(data)
+                print(f"[INFO] Comando SET_STATE enviado para {block} ({'ON' if state else 'OFF'})")
 
-
-            elif command.startswith("CHECK_STATE"):  # Modificado para utilizar gRPC
+            elif command.startswith("CHECK_STATE"):  # Usando gRPC
                 _, block = command.split()
-                for device in Lista_ip_porta:
-                    if device["BLOCO"] == block:
-                        ip_porta = device["IP"] + ':' + str(device["PORTA ENVIO TCP"])
-                        
-                        channel = grpc.insecure_channel(ip_porta)
-                        stub = sensor_pb2_grpc.SensorControlStub(channel)
-                        request = sensor_pb2.CommandRequest(command="check")
-                        response = stub.SendCommand(request)
-                        print(f"Resposta do Servidor gRPC: {response.message}")
+
+                command_msg.check_state.block_id = block
+                client_socket.sendall(command_msg.SerializeToString())
+
+                print(f"[INFO] Comando CHECK_STATE enviado para {block}")
 
             elif command == "LIST":
-                # Envia o comando LIST para o servidor
-                command_msg.type = messages_pb2.Command.LIST
-                command_msg.block_id = "999"  # Apenas um valor placeholder
-                command_msg.state = bool(int(1))  # Apenas para preencher o campo state
+                command_msg.list.CopyFrom(messages_pb2.List())  
                 client_socket.sendall(command_msg.SerializeToString())
 
                 # Aguardando a resposta do servidor
-                data = client_socket.recv(1024)  # Espera pela resposta com a lista de dispositivos
+                data = client_socket.recv(1024)
                 device_list = messages_pb2.DeviceList()
                 device_list.ParseFromString(data)
 
@@ -160,12 +133,11 @@ def send_commands(client_socket):
                         'IP': device.IP,
                         'PORTA ENVIO TCP': device.PORTA_ENVIO_TCP
                     })
-                print(f"Lista de dispositivos recebida: {Lista_ip_porta}")
+                print(f"[INFO] Lista de dispositivos recebida: {Lista_ip_porta}")
 
         except Exception as e:
             print(f"[ERRO] Erro ao enviar comando: {e}")
             break
-
 
 def connect_to_gateway(server_ip, server_port):
     """
