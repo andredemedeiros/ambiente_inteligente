@@ -203,7 +203,7 @@ def handle_client(client_socket):
             print(command_msg)
 
             # Processa o comando baseado no tipo
-            if command_msg.type == messages_pb2.Command.RECIEVE_DATA:
+            if command_msg.type == messages_pb2.Command.RECEIVE_DATA:
                 with recent_sensor_data_lock:
                     # Cria uma SensorDataCollection para segurar todos os dados do sensor
                     sensor_data_collection = messages_pb2.SensorDataCollection()

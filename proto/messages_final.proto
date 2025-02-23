@@ -39,27 +39,31 @@ message SensorDataCollection {
 // Comando enviado ao gateway
 message Command {
     enum CommandType {
-        RECIEVE_DATA = 0; // Solicitar dados
+        RECEIVE_DATA = 0; // Solicitar dados
         SET_STATE = 1;    // Alterar estado de um sensor
         LIST = 2;         // Solicitar lista de dispositivos
+        CHECK_STATE = 3;
     }
 }
 
 message Reveive_Data {
-
+    CommandType command = 1;
 }
 
 message Set_State {
-    string block_id = 1;  // Identificador do bloco
-    bool state = 2;       // Estado desejado
+    CommandType command = 1;
+    string block_id = 2;  // Identificador do bloco
+    bool state = 3;       // Estado desejado
 }
 
 message List {
+    CommandType command = 1;
     string list_request = 2;
 }
 
 message Check_State {
-    string block_id = 1;
+    CommandType command = 1;
+    string block_id = 2;
 }
 
 // Lista de dispositivos conectados
