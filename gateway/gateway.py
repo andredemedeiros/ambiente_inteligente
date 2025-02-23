@@ -12,8 +12,8 @@ import sensor_pb2
 import sensor_pb2_grpc
 from fastapi import FastAPI, HTTPException
 from google.protobuf.json_format import MessageToDict
-
 import pika
+
 
 # Configurações
 env = box.Box(dotenv_values(".env"))
@@ -29,7 +29,6 @@ devices = []  # Lista de dispositivos disponíveis via multicast UDP {'TIPO': 'D
 sensor_data_queue = []  # Fila para armazenar dados de sensores
 recent_sensor_data = {}
 recent_sensor_data_lock = threading.Lock()
-last_received_time = {}
 
 def send_multicast_gtw():
     MCAST_MSG = {
@@ -82,11 +81,37 @@ def discover_devices():
 
 def listen_for_sensor_data():
     global recent_sensor_data
-    udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    udp_socket.bind(('', GTW_UDP_PORT))
-
+    
     # Dicionário para rastrear o último tempo de recebimento de dados de cada sensor
     last_received_time = {}
+
+    connection_parameters = pika.ConnectionParameters(
+        host="localhost",
+        port=5672,
+        credentials=pika.PlainCredentials(
+            username="test",
+            password="test"
+            )
+        )
+    
+    channel = pika.BlockingConnection(connection_parameters).channel()
+    
+    channel.queue_declare(
+        queue="sensors_queue",
+        durable=True,
+	arguments={
+            'x-message-ttl': 30000
+        }
+    )
+    
+    channel.basic_consume(
+        queue="sensors_queue",
+        auto_ack=True,
+        on_message_callback=minha_callback
+    )
+    
+    print(f'Listen RabbitMQ on Port 5672')
+    channel.start_consuming()
 
     def check_timeout():
         while True:
@@ -108,21 +133,17 @@ def listen_for_sensor_data():
     timeout_thread = threading.Thread(target=check_timeout, daemon=True)
     timeout_thread.start()
 
-    while True:
+    def minha_callback(ch, method, properties, body):
         try:
-            data, addr = udp_socket.recvfrom(BUFFER_SIZE)
-            print(f"[DEBUG] Dados brutos recebidos: {data}")
-
-            # Desserializa os dados usando Protobuf
             sensor_data = messages_pb2.SensorData()
-            sensor_data.ParseFromString(data)
+            sensor_data.ParseFromString(body)
 
             print(f"[DEBUG] Dados decodificados: {sensor_data}")
 
             block_id = sensor_data.Bloco
             if block_id is None:
                 print(f"[DEBUG] Dados recebidos sem 'Bloco': {sensor_data}")
-                continue
+                return
 
             # Atualiza o último tempo de recebimento de dados do sensor
             last_received_time[block_id] = time.time()
@@ -355,68 +376,6 @@ def protobuf_to_dict(proto_obj):
             result[field.name] = value
     return result
 
-def set_broker_channel():
-
-    connection_parameters = pika.ConnectionParameters(
-        host="localhost",
-        port=5672,
-        credentials=pika.PlainCredentials(
-            username="test",
-            password="test"
-            )
-        )
-    
-    channel = pika.BlockingConnection(connection_parameters).channel()
-    
-    channel.queue_declare(
-        queue="sensors_queue",
-        durable=True,
-	arguments={
-            'x-message-ttl': 30000
-        }
-    )
-    
-    channel.basic_consume(
-        queue="sensors_queue",
-        auto_ack=True,
-        on_message_callback=minha_callback
-    )
-    
-    print(f'Listen RabbitMQ on Port 5672')
-    channel.start_consuming()
-
-    return channel
-
-def minha_callback(ch, method, properties, body):
-    global last_received_time
-    
-    print(f"Mensagem recebida: {body}")
-    try:
-        # Desserializa o comando recebido
-        sensor_data = messages_pb2.SensorData()
-        sensor_data.ParseFromString(body)
-
-        print(f"[DEBUG] Dados decodificados: {sensor_data}")
-
-        block_id = sensor_data.Bloco
-        if block_id is None:
-            print(f"[DEBUG] Dados recebidos sem 'Bloco': {sensor_data}")
-            return
-
-        # Atualiza o último tempo de recebimento de dados do sensor
-        last_received_time[block_id] = time.time()
-
-        # Atualiza o dado mais recente no vetor global protegido por Lock
-        with recent_sensor_data_lock:
-            recent_sensor_data[block_id] = sensor_data
-
-        # Adiciona à fila de dados recebidos
-        sensor_data_queue.append(sensor_data)
-        print(devices)
-    except Exception as e:
-        print(f"[ERRO] Erro ao desserializar a mensagem: {e}")
-
-channel = set_broker_channel()
 
 def main():
     threading.Thread(target=send_multicast_gtw, daemon=True).start()
@@ -424,29 +383,6 @@ def main():
     threading.Thread(target=listen_for_sensor_data, daemon=True).start()
    # threading.Thread(target=tcp_server, daemon=True).start()
     threading.Thread(target=run_rest_api, daemon=True).start()
-
-    global recent_sensor_data
-    global last_received_time
-
-    def check_timeout():
-        while True:
-            time.sleep(10)  # Verifica a cada 10 segundos
-            current_time = time.time()
-            with recent_sensor_data_lock:
-                for block_id, last_time in list(last_received_time.items()):
-                    if current_time - last_time > 20:  # Timeout de 20 segundos
-                        print(f"[INFO] Sensor do bloco {block_id} excedeu o timeout. Removendo da lista.")
-                        # Remove o sensor da lista de dispositivos conectados
-                        devices[:] = [dev for dev in devices if dev['BLOCO'] != block_id]
-                        # Remove o sensor do dicionário de últimos tempos
-                        del last_received_time[block_id]
-                        # Remove o sensor do dicionário de dados recentes
-                        if block_id in recent_sensor_data:
-                            del recent_sensor_data[block_id]
-
-    # Inicia a thread para verificar o timeout
-    timeout_thread = threading.Thread(target=check_timeout, daemon=True)
-    timeout_thread.start()
 
     while True:
         time.sleep(1)
