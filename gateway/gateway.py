@@ -387,6 +387,8 @@ def set_broker_channel():
     return channel
 
 def minha_callback(ch, method, properties, body):
+    global last_received_time
+    
     print(f"Mensagem recebida: {body}")
     try:
         # Desserializa o comando recebido
