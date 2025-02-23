@@ -12,7 +12,7 @@ import sensor_pb2
 import sensor_pb2_grpc
 from fastapi import FastAPI, HTTPException
 from google.protobuf.json_format import MessageToDict
-
+import pika
 
 
 # Configurações
@@ -354,11 +354,54 @@ def protobuf_to_dict(proto_obj):
             result[field.name] = value
     return result
 
+def set_broker_channel():
+
+    connection_parameters = pika.ConnectionParameters(
+        host="localhost",
+        port=5672,
+        credentials=pika.PlainCredentials(
+            username="test",
+            password="test"
+            )
+        )
+    
+    channel = pika.BlockingConnection(connection_parameters).channel()
+    
+    channel.queue_declare(
+        queue="sensors_queue",
+        durable=True,
+	arguments={
+            'x-message-ttl': 30000
+        }
+    )
+    
+    channel.basic_consume(
+        queue="sensors_queue",
+        auto_ack=True,
+        on_message_callback=minha_callback
+    )
+    
+    print(f'Listen RabbitMQ on Port 5672')
+    channel.start_consuming()
+
+    return channel
+
+def minha_callback(ch, method, properties, body):
+    print(f"Mensagem recebida: {body}")
+    try:
+        # Desserializa o comando recebido
+        command_msg = messages_pb2.SensorData()
+        command_msg.ParseFromString(body)
+        print(f"Comando desserializado: {command_msg}")
+    except Exception as e:
+        print(f"Erro ao desserializar a mensagem: {e}")
+
+channel = set_broker_channel()
 
 def main():
     threading.Thread(target=send_multicast_gtw, daemon=True).start()
     threading.Thread(target=discover_devices, daemon=True).start()
-    threading.Thread(target=listen_for_sensor_data, daemon=True).start()
+   # threading.Thread(target=listen_for_sensor_data, daemon=True).start()
    # threading.Thread(target=tcp_server, daemon=True).start()
     threading.Thread(target=run_rest_api, daemon=True).start()
 
