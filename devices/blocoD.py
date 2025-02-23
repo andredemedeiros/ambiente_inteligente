@@ -4,11 +4,26 @@ import json
 import time
 import threading
 import box
+import random
 import messages_pb2
+
+
+import socket
+import struct
+import json
+import time
+import threading
+import box
+import random
+import grpc
+from concurrent import futures
+import messages_pb2
+import sensor_pb2
+import sensor_pb2_grpc
 from dotenv import dotenv_values
-import paho.mqtt.client as paho
-from paho import mqtt
-import pika
+
+import sensor_pb2
+import sensor_pb2_grpc
 
 # Configurações
 env = box.Box(dotenv_values(".env"))
@@ -16,17 +31,10 @@ env = box.Box(dotenv_values(".env"))
 MCAST_GRP = env.MCAST_GRP
 MCAST_PORT = int(env.MCAST_PORT)
 
-URL_BROKER = env.URL_BROKER
-PORT_BROKER = int(env.PORT_BROKER)
-ACESS_NAME = env.ACESS_NAME
-ACESS_PASSWORD = env.ACESS_PASSWORD
-
 TIME_SAMPLE = int(env.TIME_SAMPLE)
 
-TOPIC_DEVICE = env.TOPIC_DEVICE_706
-
-DEVC_IP = env.DEVC_706_IP
-DEVC_TCP_PORT = int(env.DEVC_706_TCP_PORT)  # Porta para receber dados UDP de sensores
+DEVC_IP = env.DEVC_C_IP
+DEVC_TCP_PORT = int(env.DEVC_C_TCP_PORT)  # Porta para receber dados UDP de sensores
 BUFFER_SIZE = int(env.BUFFER_SIZE)
 
 TIME_RESET_GTW = int(env.TIME_RESET_GTW)
@@ -40,7 +48,7 @@ def send_multicast_device():
 
     MCAST_MSG = {
         'TIPO': "DEVICE",
-        'BLOCO': "706",
+        'BLOCO': "D",
         'IP': DEVC_IP, 
         'PORTA ENVIO TCP': DEVC_TCP_PORT
     }
@@ -111,7 +119,8 @@ def discover_gtws():
         except socket.timeout:
             continue
 
-def tcp_server():
+#essa função vai ser inútil agora
+#def tcp_server():
     """
     Servidor TCP para receber comandos do gateway e reagir a eles.
     """
@@ -148,13 +157,52 @@ def tcp_server():
         finally:
             client_socket.close()
 
-# Função callback do MQTT
-def on_message(client, userdata, msg):
-    global send_time, power_on
 
-    if time.time() - send_time >= TIME_SAMPLE:
+
+
+class SensorControlServicer(sensor_pb2_grpc.SensorControlServicer):
+    def SendCommand(self, request, context):
+        global power_on
+        command = request.command.lower()
+        if command == "on":
+            power_on = 1
+            response_message = "Sensor ligado com sucesso!"
+        elif command == "off":
+            power_on = 0
+            response_message = "Sensor desligado com sucesso!"
+
+        elif command == "check":
+            if power_on == 1:
+                response_message = "O sensor está ativo"
+            else:
+                response_message = "O sensor está inativo"
+
+        else:
+            response_message = "Comando inválido!"
+        print(f"Recebido: {request.command} -> Resposta: {response_message}")
+        return sensor_pb2.CommandResponse(message=response_message)
+
+def serve():
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+    sensor_pb2_grpc.add_SensorControlServicer_to_server(SensorControlServicer(), server)
+    server.add_insecure_port(f"[::]:{DEVC_TCP_PORT}")
+    server.start()
+    print(f"Servidor gRPC rodando na porta {DEVC_TCP_PORT}...")
+    try:
+        while True:
+            time.sleep(86400)
+    except KeyboardInterrupt:
+        server.stop(0)
+        print("Servidor encerrado.")
+
+
+# Função para enviar os dados de sensor para os GTW'S por UDP
+def send_udp_data():
+    global power_on
+
+    while True:
         sensor_data = messages_pb2.SensorData()
-        sensor_data.Bloco = "706"
+        sensor_data.Bloco = "D"
         sensor_data.Estado = power_on
 
         if power_on == 0:
@@ -163,45 +211,26 @@ def on_message(client, userdata, msg):
             sensor_data.Potencia.extend([0.0, 0.0, 0.0])
             sensor_data.Energia.extend([0.0, 0.0, 0.0])
             sensor_data.FatorPot.extend([0.0, 0.0, 0.0])
-
         else:
-            Tensao = json.loads(str(msg.payload.decode('utf-8'))).get("Tensao")
-            Corrente = json.loads(str(msg.payload.decode('utf-8'))).get("Corrente")
-            Potencia = json.loads(str(msg.payload.decode('utf-8'))).get("Potencia")
-            Energia = json.loads(str(msg.payload.decode('utf-8'))).get("Energia")
-            FatorPot = json.loads(str(msg.payload.decode('utf-8'))).get("FatorPot")
-            print(Tensao)
-            type(Tensao)
-            sensor_data.Tensao.extend(Tensao)
-            sensor_data.Corrente.extend(Corrente)
-            sensor_data.Potencia.extend(Potencia)
-            sensor_data.Energia.extend(Energia)
-            sensor_data.FatorPot.extend(FatorPot)
+            sensor_data.Tensao.extend([round(random.uniform(0, 220), 7) for _ in range(3)])
+            sensor_data.Corrente.extend([round(random.uniform(0, 15), 7) for _ in range(3)])
+            sensor_data.Potencia.extend([round(random.uniform(0, 1000), 7) for _ in range(3)])
+            sensor_data.Energia.extend([round(random.uniform(0, 150), 7) for _ in range(3)])
+            sensor_data.FatorPot.extend([round(random.random(), 7) for _ in range(3)])
 
         # Converte para bytes usando Protobuf
         message_sensor = sensor_data.SerializeToString()
 
-        channel.basic_publish(
-            exchange="sensors_exchange",
-            routing_key="",
-            body=message_sensor,
-            properties=pika.BasicProperties(
-                delivery_mode=2 # mensagem persistente em caso de reinicialização do broker
-            )
-        )
-        print(f"Dados do sensor enviados para o broker.")
+        # Criação do socket UDP
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        for gtw in gateways:
+            gtw_ip = gtw.get("IP")
+            gte_send_udp_port = int(gtw.get("PORTA ENVIO UDP"))
+            sock.sendto(message_sensor, (gtw_ip, gte_send_udp_port))
+            print(f"Dados do sensor enviados para {gtw}.")
+            sock.close()
         time.sleep(5)
 
-# Função para configurar o cliente MQTT
-def setup_mqtt_client():
-
-    client = paho.Client()
-    client.tls_set(tls_version=mqtt.client.ssl.PROTOCOL_TLS)
-    client.username_pw_set(ACESS_NAME, ACESS_PASSWORD)
-    client.connect(URL_BROKER, PORT_BROKER)
-    client.on_message = on_message
-    client.subscribe(TOPIC_DEVICE)
-    return client
 
 # Função para esvaziar a lista de gateways a cada 30 segundos
 def clear_gateways_list():
@@ -210,20 +239,6 @@ def clear_gateways_list():
         global gateways
         gateways.clear()  # Esvazia a lista de gateways
         print("Lista de gateways esvaziada.")
-
-def set_broker_channel():
-    connection_parameters = pika.ConnectionParameters(
-        host="localhost",
-        port=5672,
-        credentials=pika.PlainCredentials(
-            username="test",
-            password="test"
-            )
-        )
-
-    return pika.BlockingConnection(connection_parameters).channel()
-
-channel = set_broker_channel()
 
 def main():
 
@@ -243,13 +258,19 @@ def main():
     clear_gateways_thread.start()
 
     # Thread para receber dados do GTW
-    server_thread = threading.Thread(target=tcp_server)
+    #server_thread = threading.Thread(target=tcp_server)
+    #server_thread.daemon = True  # Faz com que a thread seja encerrada quando o programa principal for encerrado
+    #server_thread.start()
+
+    # Thread para enviar dados ao GTW
+    server_thread = threading.Thread(target=send_udp_data)
     server_thread.daemon = True  # Faz com que a thread seja encerrada quando o programa principal for encerrado
     server_thread.start()
 
-    # Configura e começa a rodar o cliente MQTT
-    client = setup_mqtt_client()
-    client.loop_forever()
+    threading.Thread(target=serve, daemon=True).start()
+
+    while True:
+        time.sleep(1)
 
 # Chama a função principal
 if __name__ == "__main__":

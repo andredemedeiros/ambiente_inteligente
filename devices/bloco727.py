@@ -4,13 +4,11 @@ import json
 import time
 import threading
 import box
-
 import messages_pb2
-
 from dotenv import dotenv_values
-
 import paho.mqtt.client as paho
 from paho import mqtt
+import pika
 
 # Configurações
 env = box.Box(dotenv_values(".env"))
@@ -183,33 +181,16 @@ def on_message(client, userdata, msg):
         # Converte para bytes usando Protobuf
         message_sensor = sensor_data.SerializeToString()
 
-        # Criação do socket UDP
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        for gtw in gateways:
-            gtw_ip = gtw.get("IP")
-            gte_send_udp_port = int(gtw.get("PORTA ENVIO UDP"))
-            sock.sendto(message_sensor, (gtw_ip, gte_send_udp_port))
-            print(f"Dados do sensor enviados para {gtw}.")
-            sock.close()
+        channel.basic_publish(
+            exchange="sensors_exchange",
+            routing_key="",
+            body=message_sensor,
+            properties=pika.BasicProperties(
+                delivery_mode=2 # mensagem persistente em caso de reinicialização do broker
+            )
+        )
+        print(f"Dados do sensor enviados para o broker.")
         time.sleep(5)
-
-# Função para enviar os dados de sensor para os GTW'S por UDP
-def send_udp_data(sensor_data):
-    # Converte os dados de sensor para string e depois para bytes
-    message_sensor = json.dumps(sensor_data).encode('utf-8')
-
-    # Criação do socket UDP
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
-    for gtw in gateways:
-        gtw_ip = gtw.get("IP")  # Endereço do cliente UDP (alterar para o IP real)
-        gte_send_udp_port = int(gtw.get("PORTA ENVIO UDP"))      # Porta UDP para enviar os dados
-        
-        # Enviar os dados para o cliente UDP
-        sock.sendto(message_sensor, (gtw_ip, gte_send_udp_port))
-        print(f"Dados do sensor do bloco 727 enviados para {gtw}.")
-        
-        sock.close()
 
 # Função para configurar o cliente MQTT
 def setup_mqtt_client():
@@ -229,6 +210,20 @@ def clear_gateways_list():
         global gateways
         gateways.clear()  # Esvazia a lista de gateways
         print("Lista de gateways esvaziada.")
+
+def set_broker_channel():
+    connection_parameters = pika.ConnectionParameters(
+        host="localhost",
+        port=5672,
+        credentials=pika.PlainCredentials(
+            username="test",
+            password="test"
+            )
+        )
+
+    return pika.BlockingConnection(connection_parameters).channel()
+
+channel = set_broker_channel()
 
 def main():
 
