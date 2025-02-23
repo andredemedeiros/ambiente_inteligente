@@ -11,6 +11,7 @@ import messages_pb2
 import sensor_pb2
 import sensor_pb2_grpc
 from dotenv import dotenv_values
+
 import pika
 
 # Configurações

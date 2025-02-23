@@ -6,9 +6,14 @@ import box
 from dotenv import dotenv_values
 import json
 import grpc
+import uvicorn
 import messages_pb2
 import sensor_pb2
 import sensor_pb2_grpc
+from fastapi import FastAPI, HTTPException
+from google.protobuf.json_format import MessageToDict
+
+
 
 # Configurações
 env = box.Box(dotenv_values(".env"))
@@ -142,84 +147,85 @@ def tcp_server():    #Ainda usado entre o cliente e o gateway
         print(f"Cliente conectado: {client_addr}")
         client_thread = threading.Thread(target=handle_client, args=(client_socket,))
         client_thread.start()
-
+ 
 def handle_client(client_socket):
     try:
         while True:
-            # Recebe o comando do cliente
+            # Recebe os dados do cliente
             command_data = client_socket.recv(1024)
             if not command_data:
                 break
 
-            # Desserializa o comando recebido
+            # Desserializa a mensagem recebida
             command_msg = messages_pb2.Command()
             command_msg.ParseFromString(command_data)
-            print(command_msg)
+            print(f"[DEBUG] Comando recebido: {command_msg}")
 
-            # Processa o comando baseado no tipo
-            if command_msg.type == messages_pb2.Command.RECIEVE_DATA:
+            # Identifica qual comando foi enviado usando `WhichOneof`
+            command_type = command_msg.WhichOneof("payload")
+
+            if command_type == "receive_data":
                 with recent_sensor_data_lock:
-                    # Cria uma SensorDataCollection para segurar todos os dados do sensor
                     sensor_data_collection = messages_pb2.SensorDataCollection()
 
-                    # Loop através dos dados dos sensores recentes e adiciona-os à coleção
+                    # Adiciona os dados dos sensores à coleção
                     for block_id, sensor_data in recent_sensor_data.items():
-                        # Adiciona os dados do sensor à coleção
                         sensor_data_collection.sensor_data.append(sensor_data)
 
-                    # Serializa os dados para uma string de bytes
                     serialized_data = sensor_data_collection.SerializeToString()
 
-                # Envia os dados serializados ao cliente
+                # Envia os dados ao cliente
                 print(f"[DEBUG] Dados enviados ao cliente: {len(serialized_data)} bytes")
                 client_socket.sendall(serialized_data)
 
-            elif command_msg.type == messages_pb2.Command.SET_STATE:  #USANDO GRPC
-                block_id = command_msg.block_id
-                state = "on" if command_msg.state else "off"
+            elif command_type == "set_state":  # Usando gRPC
+                block_id = command_msg.set_state.block_id
+                state = "on" if command_msg.set_state.state else "off"
+
                 for dev in devices:
                     if dev["BLOCO"] == block_id:
-                        ip_porta = dev["IP"] + ':' + str(dev["PORTA ENVIO TCP"])
-                        
+                        ip_porta = f"{dev['IP']}:{dev['PORTA ENVIO TCP']}"
+
                         channel = grpc.insecure_channel(ip_porta)
                         stub = sensor_pb2_grpc.SensorControlStub(channel)
                         request = sensor_pb2.CommandRequest(command=state)
                         response = stub.SendCommand(request)
-                        print(f"Resposta do Servidor gRPC: {response.message}")
+                        print(f"[DEBUG] Resposta do Servidor gRPC: {response.message}")
 
-            elif command_msg.type == messages_pb2.Command.LIST:
-                # Responde ao comando LIST com a lista de dispositivos
+            elif command_type == "list":
+                # Cria a lista de dispositivos
                 device_list = messages_pb2.DeviceList()
 
-                # Preenche a lista com os dispositivos conectados
                 for dev in devices:
                     device_info = messages_pb2.DeviceInfo(
-                        TIPO="DEVICE",  # A informação 'TIPO' está sendo enviada como 'DEVICE'
+                        TIPO="DEVICE",
                         BLOCO=dev["BLOCO"],
                         IP=dev["IP"],
                         PORTA_ENVIO_TCP=dev["PORTA ENVIO TCP"]
                     )
                     device_list.devices.append(device_info)
 
-                # Serializa os dados da lista
                 serialized_data = device_list.SerializeToString()
                 print(f"[DEBUG] Lista de dispositivos enviada ao cliente ({len(serialized_data)} bytes).")
                 client_socket.sendall(serialized_data)
 
-            elif command_msg.type == messages_pb2.Command.CHECK_STATE:  #usando GRPC
-                block_id = command_msg.block_id
+            elif command_type == "check_state":  # Usando gRPC
+                block_id = command_msg.check_state.block_id
+
                 for dev in devices:
                     if dev["BLOCO"] == block_id:
-                        ip_porta = dev["IP"] + ':' + str(dev["PORTA ENVIO TCP"])
-                        
+                        ip_porta = f"{dev['IP']}:{dev['PORTA ENVIO TCP']}"
+
                         channel = grpc.insecure_channel(ip_porta)
                         stub = sensor_pb2_grpc.SensorControlStub(channel)
                         request = sensor_pb2.CommandRequest(command="check")
                         response = stub.SendCommand(request)
-                        print(f"Resposta do Servidor gRPC: {response.message}")
+                        print(f"[DEBUG] Resposta do Servidor gRPC: {response.message}")
 
     except Exception as e:
         print(f"[ERRO] Erro ao processar a requisição: {e}")
+
+    finally:
         client_socket.close()
 
 # def change_device_state(device_bloc, device_ip, device_port, state):
@@ -249,11 +255,112 @@ def handle_client(client_socket):
 #         tcp_socket.close()
 
 
+app = FastAPI()
+
+# Endpoint to get sensor data
+@app.get("/sensor-data")
+def get_sensor_data():
+    with recent_sensor_data_lock:
+        # Convert Protobuf messages to dictionaries
+        sensor_data_dict = {
+            block_id: MessageToDict(sensor_data, preserving_proto_field_name=True)
+            for block_id, sensor_data in recent_sensor_data.items()
+        }
+        
+        
+        return sensor_data_dict
+
+# Endpoint to list connected devices
+@app.get("/devices")
+def list_devices():
+    return devices
+
+# Endpoint to set the state of a device
+@app.post("/set-device-state/{block_id}/{state}")
+def set_device_state(block_id: str, state: bool):
+    # Convert state to "on" or "off"
+    state_str = "on" if state else "off"
+
+    # Find the device by block_id
+    for dev in devices:
+        if dev["BLOCO"] == block_id:
+            ip_porta = f"{dev['IP']}:{dev['PORTA ENVIO TCP']}"
+
+            try:
+                # Use gRPC to communicate with the sensor
+                channel = grpc.insecure_channel(ip_porta)
+                stub = sensor_pb2_grpc.SensorControlStub(channel)
+                request = sensor_pb2.CommandRequest(command=state_str)
+                response = stub.SendCommand(request)
+                print(f"[DEBUG] Resposta do Servidor gRPC: {response.message}")
+
+                # Return the response message
+                return {
+                    "block_id": block_id,
+                    "state": state_str,
+                    "message": response.message
+                }
+            except grpc.RpcError as e:
+                raise HTTPException(status_code=500, detail=f"gRPC error: {e.details()}")
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Error communicating with sensor: {str(e)}")
+
+    # If the device is not found, return a 404 error
+    raise HTTPException(status_code=404, detail=f"No device found with block_id: {block_id}")
+
+
+# Endpoint to check the state of a device
+@app.get("/check-device-state/{block_id}")
+def check_device_state(block_id):
+    
+    for dev in devices:
+        if dev["BLOCO"] == block_id:
+            sensor_ip = dev["IP"]
+            sensor_port = dev["PORTA ENVIO TCP"]
+            sensor_address = f"{sensor_ip}:{sensor_port}"
+
+            try:
+                # Use gRPC to communicate with the sensor
+                channel = grpc.insecure_channel(sensor_address)
+                stub = sensor_pb2_grpc.SensorControlStub(channel)
+                request = sensor_pb2.CommandRequest(command="check")
+                response = stub.SendCommand(request)
+
+                # Return the sensor's state
+                return {"block_id": block_id, "state": response.message}
+            except grpc.RpcError as e:
+                raise HTTPException(status_code=500, detail=f"gRPC error: {e.details()}")
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Error communicating with sensor: {str(e)}")
+    else:
+        raise HTTPException(status_code=404, detail=f"No device found with block_id: {block_id}")
+
+def run_rest_api():
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+def protobuf_to_dict(proto_obj):
+    """
+    Converts a Protobuf message to a Python dictionary.
+    """
+    result = {}
+    for field in proto_obj.DESCRIPTOR.fields:
+        value = getattr(proto_obj, field.name)
+        if field.type == field.TYPE_MESSAGE:  # Nested Protobuf message
+            if field.label == field.LABEL_REPEATED:  # Repeated field (list)
+                result[field.name] = [protobuf_to_dict(item) for item in value]
+            else:
+                result[field.name] = protobuf_to_dict(value)
+        else:  # Scalar field
+            result[field.name] = value
+    return result
+
+
 def main():
     threading.Thread(target=send_multicast_gtw, daemon=True).start()
     threading.Thread(target=discover_devices, daemon=True).start()
     threading.Thread(target=listen_for_sensor_data, daemon=True).start()
-    threading.Thread(target=tcp_server, daemon=True).start()
+   # threading.Thread(target=tcp_server, daemon=True).start()
+    threading.Thread(target=run_rest_api, daemon=True).start()
 
     while True:
         time.sleep(1)

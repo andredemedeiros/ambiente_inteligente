@@ -38,15 +38,29 @@ message SensorDataCollection {
 
 // Comando enviado ao gateway
 message Command {
-    enum CommandType {
-        RECIEVE_DATA = 0; // Solicitar dados
-        SET_STATE = 1;    // Alterar estado de um sensor
-        LIST = 2;         // Solicitar lista de dispositivos
+    oneof payload {
+        ReceiveData receive_data = 1;
+        SetState set_state = 2;
+        List list = 3;
+        CheckState check_state = 4;
     }
+}
 
-    CommandType type = 1; // Tipo do comando
-    string block_id = 2;  // Identificador do bloco (apenas para SET_STATE)
-    bool state = 3;       // Estado desejado (apenas para SET_STATE)
+message ReceiveData {
+    // Nenhum campo adicional necessário
+}
+
+message SetState {
+    string block_id = 1;
+    bool state = 2;
+}
+
+message List {
+    string list_request = 1;
+}
+
+message CheckState {
+    string block_id = 1;
 }
 
 // Lista de dispositivos conectados

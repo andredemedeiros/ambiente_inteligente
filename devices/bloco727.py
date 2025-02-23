@@ -4,7 +4,15 @@ import json
 import time
 import threading
 import box
+
+import random
 import messages_pb2
+
+import grpc
+from concurrent import futures
+import sensor_pb2
+import sensor_pb2_grpc
+
 from dotenv import dotenv_values
 import paho.mqtt.client as paho
 from paho import mqtt
@@ -111,7 +119,7 @@ def discover_gtws():
         except socket.timeout:
             continue
 
-def tcp_server():
+#def tcp_server():
     """
     Servidor TCP para receber comandos do gateway e reagir a eles.
     """
@@ -147,6 +155,41 @@ def tcp_server():
             print(f"[ERRO] Erro ao processar dados recebidos: {e}")
         finally:
             client_socket.close()
+
+class SensorControlServicer(sensor_pb2_grpc.SensorControlServicer):
+    def SendCommand(self, request, context):
+        global power_on
+        command = request.command.lower()
+        if command == "on":
+            power_on = 1
+            response_message = "Sensor ligado com sucesso!"
+        elif command == "off":
+            power_on = 0
+            response_message = "Sensor desligado com sucesso!"
+
+        elif command == "check":
+            if power_on == 1:
+                response_message = "O sensor está ativo"
+            else:
+                response_message = "O sensor está inativo"
+
+        else:
+            response_message = "Comando inválido!"
+        print(f"Recebido: {request.command} -> Resposta: {response_message}")
+        return sensor_pb2.CommandResponse(message=response_message)
+
+def serve():
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+    sensor_pb2_grpc.add_SensorControlServicer_to_server(SensorControlServicer(), server)
+    server.add_insecure_port(f"[::]:{DEVC_TCP_PORT}")
+    server.start()
+    print(f"Servidor gRPC rodando na porta {DEVC_TCP_PORT}...")
+    try:
+        while True:
+            time.sleep(86400)
+    except KeyboardInterrupt:
+        server.stop(0)
+        print("Servidor encerrado.")
 
 # Função callback do MQTT
 def on_message(client, userdata, msg):
@@ -243,13 +286,16 @@ def main():
     clear_gateways_thread.start()
 
     # Thread para receber dados do GTW
-    server_thread = threading.Thread(target=tcp_server)
-    server_thread.daemon = True  # Faz com que a thread seja encerrada quando o programa principal for encerrado
-    server_thread.start()
+    # server_thread = threading.Thread(target=tcp_server)
+    # server_thread.daemon = True  # Faz com que a thread seja encerrada quando o programa principal for encerrado
+    # server_thread.start()
 
     # Configura e começa a rodar o cliente MQTT
     client = setup_mqtt_client()
     client.loop_forever()
+
+    # Thread para o servidor GRPC
+    threading.Thread(target=serve, daemon=True).start()
 
 # Chama a função principal
 if __name__ == "__main__":

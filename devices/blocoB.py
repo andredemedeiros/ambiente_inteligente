@@ -5,13 +5,17 @@ import time
 import threading
 import box
 import random
+
+import messages_pb2
+
 import grpc
 from concurrent import futures
-import messages_pb2
 import sensor_pb2
 import sensor_pb2_grpc
 from dotenv import dotenv_values
+
 import pika
+
 
 # Configurações
 env = box.Box(dotenv_values(".env"))
