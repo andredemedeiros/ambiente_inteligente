@@ -29,6 +29,7 @@ devices = []  # Lista de dispositivos disponíveis via multicast UDP {'TIPO': 'D
 sensor_data_queue = []  # Fila para armazenar dados de sensores
 recent_sensor_data = {}
 recent_sensor_data_lock = threading.Lock()
+last_received_time = {}
 
 def send_multicast_gtw():
     MCAST_MSG = {
@@ -416,8 +417,6 @@ def minha_callback(ch, method, properties, body):
         print(f"[ERRO] Erro ao desserializar a mensagem: {e}")
 
 channel = set_broker_channel()
-
-last_received_time = {}
 
 def main():
     threading.Thread(target=send_multicast_gtw, daemon=True).start()
