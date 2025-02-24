@@ -12,7 +12,7 @@ import sensor_pb2
 import sensor_pb2_grpc
 from fastapi import FastAPI, HTTPException
 from google.protobuf.json_format import MessageToDict
-import pika
+
 
 
 # Configurações
@@ -81,63 +81,11 @@ def discover_devices():
 
 def listen_for_sensor_data():
     global recent_sensor_data
-    
+    udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    udp_socket.bind(('', GTW_UDP_PORT))
+
     # Dicionário para rastrear o último tempo de recebimento de dados de cada sensor
     last_received_time = {}
-
-    # Definindo a função de callback antes de usá-la
-    def minha_callback(ch, method, properties, body):
-        try:
-            sensor_data = messages_pb2.SensorData()
-            sensor_data.ParseFromString(body)
-
-            print(f"[DEBUG] Dados decodificados: {sensor_data}")
-
-            block_id = sensor_data.Bloco
-            if block_id is None:
-                print(f"[DEBUG] Dados recebidos sem 'Bloco': {sensor_data}")
-                return
-
-            # Atualiza o último tempo de recebimento de dados do sensor
-            last_received_time[block_id] = time.time()
-
-            # Atualiza o dado mais recente no vetor global protegido por Lock
-            with recent_sensor_data_lock:
-                recent_sensor_data[block_id] = sensor_data
-
-            # Adiciona à fila de dados recebidos
-            sensor_data_queue.append(sensor_data)
-            print(devices)
-        except Exception as e:
-            print(f"[ERRO] Erro ao receber dados UDP: {e}")
-
-    connection_parameters = pika.ConnectionParameters(
-        host="localhost",
-        port=5672,
-        credentials=pika.PlainCredentials(
-            username="test",
-            password="test"
-        )
-    )
-    
-    channel = pika.BlockingConnection(connection_parameters).channel()
-    
-    channel.queue_declare(
-        queue="sensors_queue",
-        durable=True,
-        arguments={
-            'x-message-ttl': 30000
-        }
-    )
-    
-    channel.basic_consume(
-        queue="sensors_queue",
-        auto_ack=True,
-        on_message_callback=minha_callback
-    )
-    
-    print(f'Listen RabbitMQ on Port 5672')
-    channel.start_consuming()
 
     def check_timeout():
         while True:
@@ -160,7 +108,33 @@ def listen_for_sensor_data():
     timeout_thread.start()
 
     while True:
-        time.sleep(1)
+        try:
+            data, addr = udp_socket.recvfrom(BUFFER_SIZE)
+            print(f"[DEBUG] Dados brutos recebidos: {data}")
+
+            # Desserializa os dados usando Protobuf
+            sensor_data = messages_pb2.SensorData()
+            sensor_data.ParseFromString(data)
+
+            print(f"[DEBUG] Dados decodificados: {sensor_data}")
+
+            block_id = sensor_data.Bloco
+            if block_id is None:
+                print(f"[DEBUG] Dados recebidos sem 'Bloco': {sensor_data}")
+                continue
+
+            # Atualiza o último tempo de recebimento de dados do sensor
+            last_received_time[block_id] = time.time()
+
+            # Atualiza o dado mais recente no vetor global protegido por Lock
+            with recent_sensor_data_lock:
+                recent_sensor_data[block_id] = sensor_data
+
+            # Adiciona à fila de dados recebidos
+            sensor_data_queue.append(sensor_data)
+            print(devices)
+        except Exception as e:
+            print(f"[ERRO] Erro ao receber dados UDP: {e}")
 
 def tcp_server():    #Ainda usado entre o cliente e o gateway
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

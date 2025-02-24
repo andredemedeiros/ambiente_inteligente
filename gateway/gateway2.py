@@ -81,7 +81,7 @@ def discover_devices():
 
 def listen_for_sensor_data():
     global recent_sensor_data
-    
+
     # Dicionário para rastrear o último tempo de recebimento de dados de cada sensor
     last_received_time = {}
 
@@ -111,34 +111,6 @@ def listen_for_sensor_data():
         except Exception as e:
             print(f"[ERRO] Erro ao receber dados UDP: {e}")
 
-    connection_parameters = pika.ConnectionParameters(
-        host="localhost",
-        port=5672,
-        credentials=pika.PlainCredentials(
-            username="test",
-            password="test"
-        )
-    )
-    
-    channel = pika.BlockingConnection(connection_parameters).channel()
-    
-    channel.queue_declare(
-        queue="sensors_queue",
-        durable=True,
-        arguments={
-            'x-message-ttl': 30000
-        }
-    )
-    
-    channel.basic_consume(
-        queue="sensors_queue",
-        auto_ack=True,
-        on_message_callback=minha_callback
-    )
-    
-    print(f'Listen RabbitMQ on Port 5672')
-    channel.start_consuming()
-
     def check_timeout():
         while True:
             time.sleep(10)  # Verifica a cada 10 segundos
@@ -155,12 +127,50 @@ def listen_for_sensor_data():
                         if block_id in recent_sensor_data:
                             del recent_sensor_data[block_id]
 
+    # Configura a conexão com o RabbitMQ
+    connection_parameters = pika.ConnectionParameters(
+        host="localhost",
+        port=5672,
+        credentials=pika.PlainCredentials(
+            username="test",
+            password="test"
+        )
+    )
+    
+    connection = pika.BlockingConnection(connection_parameters)
+    channel = connection.channel()
+
+    channel.queue_declare(
+        queue="sensors_queue",
+        durable=True,
+        arguments={
+            'x-message-ttl': 30000  # Tempo de vida da mensagem
+        }
+    )
+
+    # Função para escutar os dados da fila RabbitMQ
+    def start_consuming():
+        channel.basic_consume(
+            queue="sensors_queue",
+            auto_ack=True,
+            on_message_callback=minha_callback
+        )
+
+        print(f'Listening to RabbitMQ on Port 5672')
+        channel.start_consuming()
+
+    # Inicia a thread para o RabbitMQ
+    consume_thread = threading.Thread(target=start_consuming, daemon=True)
+    consume_thread.start()
+
     # Inicia a thread para verificar o timeout
     timeout_thread = threading.Thread(target=check_timeout, daemon=True)
     timeout_thread.start()
 
+    # Mantém a função ativa indefinidamente
     while True:
-        time.sleep(1)
+        time.sleep(1)  # O loop de espera mantém a função ativa para as threads
+
 
 def tcp_server():    #Ainda usado entre o cliente e o gateway
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

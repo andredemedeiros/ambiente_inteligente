@@ -24,25 +24,37 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0emessages.proto\"\x82\x01\n\nSensorData\x12\x0e\n\x06Tensao\x18\x01 \x03(\x02\x12\x10\n\x08\x43orrente\x18\x02 \x03(\x02\x12\x10\n\x08Potencia\x18\x03 \x03(\x02\x12\x0f\n\x07\x45nergia\x18\x04 \x03(\x02\x12\x10\n\x08\x46\x61torPot\x18\x05 \x03(\x02\x12\r\n\x05\x42loco\x18\x06 \x01(\t\x12\x0e\n\x06\x45stado\x18\x07 \x01(\x05\"N\n\nDeviceInfo\x12\x0c\n\x04TIPO\x18\x01 \x01(\t\x12\r\n\x05\x42LOCO\x18\x02 \x01(\t\x12\n\n\x02IP\x18\x03 \x01(\t\x12\x17\n\x0fPORTA_ENVIO_TCP\x18\x04 \x01(\x05\"P\n\x0bGatewayInfo\x12\x0c\n\x04TIPO\x18\x01 \x01(\t\x12\x0e\n\x06GTW_ID\x18\x02 \x01(\x05\x12\n\n\x02IP\x18\x03 \x01(\t\x12\x17\n\x0fPORTA_ENVIO_UDP\x18\x04 \x01(\x05\"8\n\x14SensorDataCollection\x12 \n\x0bsensor_data\x18\x01 \x03(\x0b\x32\x0b.SensorData\"~\n\x07\x43ommand\x12\"\n\x04type\x18\x01 \x01(\x0e\x32\x14.Command.CommandType\x12\x10\n\x08\x62lock_id\x18\x02 \x01(\t\x12\r\n\x05state\x18\x03 \x01(\x08\".\n\x0b\x43ommandType\x12\x10\n\x0cRECIEVE_DATA\x10\x00\x12\r\n\tSET_STATE\x10\x01\" \n\x0bStateChange\x12\x11\n\tnew_state\x18\x01 \x01(\tb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0emessages.proto\x12\x07sensors\"\x82\x01\n\nSensorData\x12\x0e\n\x06Tensao\x18\x01 \x03(\x02\x12\x10\n\x08\x43orrente\x18\x02 \x03(\x02\x12\x10\n\x08Potencia\x18\x03 \x03(\x02\x12\x0f\n\x07\x45nergia\x18\x04 \x03(\x02\x12\x10\n\x08\x46\x61torPot\x18\x05 \x03(\x02\x12\r\n\x05\x42loco\x18\x06 \x01(\t\x12\x0e\n\x06\x45stado\x18\x07 \x01(\x05\"N\n\nDeviceInfo\x12\x0c\n\x04TIPO\x18\x01 \x01(\t\x12\r\n\x05\x42LOCO\x18\x02 \x01(\t\x12\n\n\x02IP\x18\x03 \x01(\t\x12\x17\n\x0fPORTA_ENVIO_TCP\x18\x04 \x01(\x05\"P\n\x0bGatewayInfo\x12\x0c\n\x04TIPO\x18\x01 \x01(\t\x12\x0e\n\x06GTW_ID\x18\x02 \x01(\x05\x12\n\n\x02IP\x18\x03 \x01(\t\x12\x17\n\x0fPORTA_ENVIO_UDP\x18\x04 \x01(\x05\"@\n\x14SensorDataCollection\x12(\n\x0bsensor_data\x18\x01 \x03(\x0b\x32\x13.sensors.SensorData\"\xb5\x01\n\x07\x43ommand\x12,\n\x0creceive_data\x18\x01 \x01(\x0b\x32\x14.sensors.ReceiveDataH\x00\x12&\n\tset_state\x18\x02 \x01(\x0b\x32\x11.sensors.SetStateH\x00\x12\x1d\n\x04list\x18\x03 \x01(\x0b\x32\r.sensors.ListH\x00\x12*\n\x0b\x63heck_state\x18\x04 \x01(\x0b\x32\x13.sensors.CheckStateH\x00\x42\t\n\x07payload\"\r\n\x0bReceiveData\"+\n\x08SetState\x12\x10\n\x08\x62lock_id\x18\x01 \x01(\t\x12\r\n\x05state\x18\x02 \x01(\x08\"\x1c\n\x04List\x12\x14\n\x0clist_request\x18\x01 \x01(\t\"\x1e\n\nCheckState\x12\x10\n\x08\x62lock_id\x18\x01 \x01(\t\"2\n\nDeviceList\x12$\n\x07\x64\x65vices\x18\x01 \x03(\x0b\x32\x13.sensors.DeviceInfo\"0\n\x06Sensor\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\n\n\x02ip\x18\x02 \x01(\t\x12\x0c\n\x04port\x18\x03 \x01(\x05\".\n\nSensorList\x12 \n\x07sensors\x18\x01 \x03(\x0b\x32\x0f.sensors.Sensor\" \n\x0bStateChange\x12\x11\n\tnew_state\x18\x01 \x01(\tb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'messages_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_SENSORDATA']._serialized_start=19
-  _globals['_SENSORDATA']._serialized_end=149
-  _globals['_DEVICEINFO']._serialized_start=151
-  _globals['_DEVICEINFO']._serialized_end=229
-  _globals['_GATEWAYINFO']._serialized_start=231
-  _globals['_GATEWAYINFO']._serialized_end=311
-  _globals['_SENSORDATACOLLECTION']._serialized_start=313
-  _globals['_SENSORDATACOLLECTION']._serialized_end=369
-  _globals['_COMMAND']._serialized_start=371
-  _globals['_COMMAND']._serialized_end=497
-  _globals['_COMMAND_COMMANDTYPE']._serialized_start=451
-  _globals['_COMMAND_COMMANDTYPE']._serialized_end=497
-  _globals['_STATECHANGE']._serialized_start=499
-  _globals['_STATECHANGE']._serialized_end=531
+  _globals['_SENSORDATA']._serialized_start=28
+  _globals['_SENSORDATA']._serialized_end=158
+  _globals['_DEVICEINFO']._serialized_start=160
+  _globals['_DEVICEINFO']._serialized_end=238
+  _globals['_GATEWAYINFO']._serialized_start=240
+  _globals['_GATEWAYINFO']._serialized_end=320
+  _globals['_SENSORDATACOLLECTION']._serialized_start=322
+  _globals['_SENSORDATACOLLECTION']._serialized_end=386
+  _globals['_COMMAND']._serialized_start=389
+  _globals['_COMMAND']._serialized_end=570
+  _globals['_RECEIVEDATA']._serialized_start=572
+  _globals['_RECEIVEDATA']._serialized_end=585
+  _globals['_SETSTATE']._serialized_start=587
+  _globals['_SETSTATE']._serialized_end=630
+  _globals['_LIST']._serialized_start=632
+  _globals['_LIST']._serialized_end=660
+  _globals['_CHECKSTATE']._serialized_start=662
+  _globals['_CHECKSTATE']._serialized_end=692
+  _globals['_DEVICELIST']._serialized_start=694
+  _globals['_DEVICELIST']._serialized_end=744
+  _globals['_SENSOR']._serialized_start=746
+  _globals['_SENSOR']._serialized_end=794
+  _globals['_SENSORLIST']._serialized_start=796
+  _globals['_SENSORLIST']._serialized_end=842
+  _globals['_STATECHANGE']._serialized_start=844
+  _globals['_STATECHANGE']._serialized_end=876
 # @@protoc_insertion_point(module_scope)
